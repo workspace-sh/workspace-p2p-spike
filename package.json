@@ -5,7 +5,8 @@
   "description": "Research spike: evaluate Hypercore as Workspace's P2P data layer across iOS, Android, and macOS.",
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "engines": {
     "node": ">=20"

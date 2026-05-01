@@ -1,15 +1,20 @@
-// Node implementation. Used directly by:
-//   - the Phase 1 standalone replication smoke test
-//   - the spawned Node child process on the macOS path (Phase 3)
+// Node implementation of @workspace/p2p-runtime.
 //
-// THIS FILE IS A STUB. Phase 1 fills in the body using:
-//   import Hypercore from 'hypercore';
-//   import Corestore from 'corestore';
-//   import Hyperswarm from 'hyperswarm';
-// …with discovery-key-hashed topics and per-log replication.
+// Used directly by:
+//   - the apps/node smoke harness (Phase 1 of PLAN.md)
+//   - the spawned Node child process on the macOS RN-host path (Phase 3)
 //
-// Deliberately not pulling those deps in until Phase 1 actually runs them, so
-// `npm install` at the repo root stays light until the spike begins.
+// Deliberately small: every public method maps to a single corestore /
+// hyperswarm call. The whole point of this package is that the consuming app
+// shouldn't care about Hypercore at all, only about logs and topics.
+
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import Corestore from 'corestore';
+import Hyperswarm from 'hyperswarm';
+import b4a from 'b4a';
 
 import type {
   CreateRuntimeOptions,
@@ -20,44 +25,215 @@ import type {
   TopicId,
 } from './types.ts';
 
-class NotImplementedRuntime implements P2PRuntime {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  constructor(_opts: CreateRuntimeOptions) {}
+// ----------------------------------------------------------------------------
+// Log wrapper around a Hypercore
+// ----------------------------------------------------------------------------
+
+class NodeLog implements Log {
+  private listeners = new Set<() => void>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly core: any;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(core: any) {
+    this.core = core;
+    core.on('append', () => {
+      for (const cb of this.listeners) cb();
+    });
+  }
+
+  get key(): LogKey {
+    return b4a.toString(this.core.key, 'hex');
+  }
+  get writable(): boolean {
+    return Boolean(this.core.writable);
+  }
+  get length(): number {
+    return this.core.length;
+  }
+
+  async append(block: Uint8Array): Promise<number> {
+    return await this.core.append(b4a.from(block));
+  }
+
+  async get(index: number): Promise<Uint8Array> {
+    const buf = await this.core.get(index);
+    // Hypercore returns a Buffer / b4a Uint8Array — normalise to a plain Uint8Array
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  }
+
+  on(event: 'append', cb: () => void): () => void {
+    if (event !== 'append') throw new Error(`unknown event: ${String(event)}`);
+    this.listeners.add(cb);
+    return () => {
+      this.listeners.delete(cb);
+    };
+  }
+
+  async close(): Promise<void> {
+    await this.core.close();
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Runtime
+// ----------------------------------------------------------------------------
+
+export class NodeRuntime implements P2PRuntime {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private store!: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private swarm!: any;
+  private storagePath: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private joinedTopics = new Map<string, any>();
+  private logs = new Map<string, NodeLog>();
+  private didCache: Did | null = null;
+  private opened = false;
+
+  constructor(opts: CreateRuntimeOptions = {}) {
+    const s = opts.storage;
+    if (!s || s === ':memory:') {
+      this.storagePath = mkdtempSync(join(tmpdir(), 'p2p-runtime-'));
+    } else {
+      if (!existsSync(s)) mkdirSync(s, { recursive: true });
+      this.storagePath = s;
+    }
+  }
 
   async ready(): Promise<void> {
-    notYet('ready');
+    if (this.opened) return;
+    this.store = new Corestore(this.storagePath);
+    await this.store.ready();
+    this.swarm = new Hyperswarm();
+    this.swarm.on('connection', (conn: unknown) => {
+      // Every incoming connection is paired with a corestore replication stream.
+      // corestore knows which cores the peer wants and responds to gets.
+      this.store.replicate(conn);
+    });
+
+    // Stable per-store identifier. Encoded as `did:key:z<hex>` purely so the
+    // surface compiles against the `did:key:` type — the `z` is the multibase
+    // prefix that real ed25519 did:key encoding uses.
+    //
+    // PLACEHOLDER: this is NOT a standards-compliant did:key. The future UCAN
+    // spike replaces this with a real ed25519 keypair encoded per the did:key
+    // method spec. For Phase 1 we only need a stable identifier.
+    const pk = this.store.primaryKey as Uint8Array;
+    this.didCache = `did:key:z${b4a.toString(pk, 'hex')}` as Did;
+    this.opened = true;
   }
+
   did(): Did {
-    notYet('did');
+    if (!this.didCache) throw new Error('Runtime not ready — await ready() first');
+    return this.didCache;
   }
+
   async createLog(): Promise<Log> {
-    notYet('createLog');
+    if (!this.opened) throw new Error('Runtime not ready');
+    const name = `log/${randomName()}`;
+    const core = this.store.get({ name, valueEncoding: 'binary' });
+    await core.ready();
+    const log = new NodeLog(core);
+    this.logs.set(log.key, log);
+    return log;
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async openLog(_key: LogKey): Promise<Log> {
-    notYet('openLog');
+
+  async openLog(key: LogKey): Promise<Log> {
+    if (!this.opened) throw new Error('Runtime not ready');
+    const existing = this.logs.get(key);
+    if (existing) return existing;
+    const core = this.store.get({ key: b4a.from(key, 'hex'), valueEncoding: 'binary' });
+    await core.ready();
+    const log = new NodeLog(core);
+    this.logs.set(key, log);
+    return log;
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async joinTopic(_topic: TopicId): Promise<void> {
-    notYet('joinTopic');
+
+  async joinTopic(topic: TopicId): Promise<void> {
+    if (!this.opened) throw new Error('Runtime not ready');
+    if (this.joinedTopics.has(topic)) return;
+    const buf = b4a.from(topic, 'hex');
+    if (buf.length !== 32) {
+      throw new Error(`Topic must be 32 bytes (64 hex chars), got ${buf.length} bytes`);
+    }
+    const discovery = this.swarm.join(buf, { server: true, client: true });
+    this.joinedTopics.set(topic, discovery);
+    await discovery.flushed();
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async leaveTopic(_topic: TopicId): Promise<void> {
-    notYet('leaveTopic');
+
+  async leaveTopic(topic: TopicId): Promise<void> {
+    const d = this.joinedTopics.get(topic);
+    if (!d) return;
+    await d.destroy();
+    this.joinedTopics.delete(topic);
   }
+
   async close(): Promise<void> {
-    notYet('close');
+    for (const log of this.logs.values()) {
+      try {
+        await log.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (this.swarm) {
+      try {
+        await this.swarm.destroy();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (this.store) {
+      try {
+        await this.store.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.opened = false;
+  }
+
+  // --------------------------------------------------------------------------
+  // Internal: direct duplex-pipe replication for tests.
+  //
+  // NOT part of the public P2PRuntime interface. Tests use it to pair two
+  // runtimes without standing up the DHT (deterministic, no network).
+  // The real apps/node smoke harness uses joinTopic and the actual swarm.
+  // --------------------------------------------------------------------------
+
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  __pipeReplicate(other: NodeRuntime): () => Promise<void> {
+    if (!this.opened || !other.opened) {
+      throw new Error('both runtimes must be ready before piping');
+    }
+    const a = this.store.replicate(true);
+    const b = other.store.replicate(false);
+    a.pipe(b).pipe(a);
+    return async () => {
+      a.destroy();
+      b.destroy();
+    };
   }
 }
 
-function notYet(method: string): never {
-  throw new Error(
-    `[@workspace/p2p-runtime/node] ${method}() is not implemented yet — Phase 1 of PLAN.md`,
-  );
+function randomName(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export async function createRuntime(opts: CreateRuntimeOptions = {}): Promise<P2PRuntime> {
-  return new NotImplementedRuntime(opts);
+export async function createRuntime(
+  opts: CreateRuntimeOptions = {},
+): Promise<P2PRuntime> {
+  const r = new NodeRuntime(opts);
+  await r.ready();
+  return r;
 }
 
-export type { P2PRuntime, Log, Did, TopicId, LogKey, CreateRuntimeOptions } from './types.ts';
+export type {
+  P2PRuntime,
+  Log,
+  Did,
+  TopicId,
+  LogKey,
+  CreateRuntimeOptions,
+} from './types.ts';

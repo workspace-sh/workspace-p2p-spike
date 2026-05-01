@@ -16,16 +16,17 @@
       "default": "./src/runtime.node.ts"
     }
   },
-  "files": [
-    "src",
-    "README.md"
-  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "test": "node --experimental-strip-types --no-warnings --test \"tests/**/*.test.ts\""
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "b4a": "1.8.0",
+    "corestore": "7.9.2",
+    "hyperswarm": "4.17.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

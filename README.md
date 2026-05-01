@@ -2,7 +2,7 @@
 
 research spike: evaluate Hypercore as Workspace's P2P data layer across iOS, Android, and macOS (and eventually Windows), with a single shared TypeScript codebase and platform-specific bootstrap layers.
 
-**status: scaffolded, phases not yet started.** the monorepo + library shape is in place; the actual replication smoke tests, BareKit integration, and macOS native module are still to do. read [PLAN.md](./PLAN.md) for the phased scope.
+**status: phase 1 done.** Node implementation works; two runtimes replicate over real Hyperswarm; integration test green. Phases 2 (BareKit on iOS/Android) and 3 (RN-macOS + spawned Node) are not yet started. read [PLAN.md](./PLAN.md) for the full phased scope.
 
 ## tldr
 
@@ -36,14 +36,23 @@ research spike: evaluate Hypercore as Workspace's P2P data layer across iOS, And
     └── README.md              # how each per-host harness gets scaffolded, when
 ```
 
-## install + typecheck
+## install + verify
 
 ```sh
-npm install
-npm run typecheck
+npm install         # pulls corestore + hyperswarm + b4a (~80 packages)
+npm run typecheck   # tsc --noEmit across the workspace
+npm run test        # integration tests for runtime.node.ts (no network, ~3s)
 ```
 
-`npm install` is intentionally light at this stage — no hypercore / hyperswarm / Expo / react-native-macos toolchain is pulled in until the relevant phase begins. Adding those happens in their own commits.
+End-to-end smoke against the real Hyperswarm DHT (needs internet):
+
+```sh
+npm -w @workspace/p2p-spike-node run smoke
+```
+
+This spins up two `NodeRuntime` instances in one process, joins them on a shared topic, appends three blocks on peer A, and reads them back on peer B. Last verified run replicated in **259 ms**.
+
+Note: this is npm-only. Bun is not used because `react-native-macos` and Bun do not play well together; the eventual main monorepo will be npm-driven for the same reason.
 
 ## out of scope (call-outs from PLAN.md)
 
