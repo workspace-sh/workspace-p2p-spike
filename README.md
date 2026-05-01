@@ -1,10 +1,10 @@
-# workspace-p2p-spike
+# Workspace P2P Spike
 
 research spike: evaluate Hypercore as Workspace's P2P data layer across iOS, Android, and macOS (and eventually Windows), with a single shared TypeScript codebase and platform-specific bootstrap layers.
 
 **status: phase 1 done.** Node implementation works; two runtimes replicate over real Hyperswarm; integration test green. Phases 2 (BareKit on iOS/Android) and 3 (RN-macOS + spawned Node) are not yet started. read [PLAN.md](./PLAN.md) for the full phased scope.
 
-## tldr
+## TL;DR
 
 - evaluate Hypercore (via Holepunch/Bare) as a unified P2P substrate
 - mobile (iOS/Android) path is documented: `react-native-bare-kit` + `bare-pack`
@@ -13,7 +13,7 @@ research spike: evaluate Hypercore as Workspace's P2P data layer across iOS, And
 - Windows compatibility is noted but out of scope for this spike's findings doc
 - output: a written go/no-go recommendation plus a sketched `@workspace/p2p-runtime` interface
 
-## layout
+## Layout
 
 ```
 .
@@ -36,7 +36,7 @@ research spike: evaluate Hypercore as Workspace's P2P data layer across iOS, And
     └── README.md              # how each per-host harness gets scaffolded, when
 ```
 
-## install + verify
+## Install + Verify
 
 ```sh
 npm install         # pulls corestore + hyperswarm + b4a (~80 packages)
@@ -54,14 +54,14 @@ This spins up two `NodeRuntime` instances in one process, joins them on a shared
 
 Note: this is npm-only. Bun is not used because `react-native-macos` and Bun do not play well together; the eventual main monorepo will be npm-driven for the same reason.
 
-## out of scope (call-outs from PLAN.md)
+## Out of Scope (call-outs from PLAN.md)
 
 - UCAN integration — separate later spike. Findings from a parallel UCAN exploration are preserved at [docs/ucan-prior-research.md](./docs/ucan-prior-research.md).
 - Any UI work.
 - Bundling Node.js inside the macOS app (later concern).
 - Hyperdrive, Autobase, or higher-level abstractions.
 
-## related
+## Related
 
 - [`workspace-sh/workspace`](https://github.com/workspace-sh/workspace) — the consuming app
-- [`workspace-sh/table-file-format`](https://github.com/workspace-sh/table-file-format) — sibling research repo, same shape
+- [`workspace-sh/table-file-format`](https://github.com/workspace-sh/table-file-format) — format spike; outcomes there benefit text and text/binary (SQLite) file formats downstream, and inform anything Workspace eventually persists

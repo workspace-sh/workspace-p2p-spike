@@ -1,4 +1,4 @@
-# apps/
+# Apps
 
 Per-host harnesses that consume `@workspace/p2p-runtime`. Empty until the relevant phase of [PLAN.md](../PLAN.md) begins.
 
@@ -14,6 +14,6 @@ When ready, scaffold:
 
 Once an app exists, add it to the root `package.json` `workspaces` array (alongside `packages/*`).
 
-## Why empty for now
+## Why Empty for Now
 
 `npm install` at the repo root would otherwise pull in Expo's full toolchain, react-native-macos's CocoaPods/Xcode chain, etc., before any spike work begins. Keep the surface light until each phase actually starts.

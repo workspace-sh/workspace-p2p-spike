@@ -10,13 +10,13 @@ npm -w @workspace/p2p-spike-node run smoke
 
 Requires internet access — Hyperswarm needs the public DHT to bootstrap. Replication itself is local once peers connect.
 
-## What it proves
+## What It Proves
 
 This script is the answer to PLAN.md Phase 1: *"Confirm two instances can replicate via Hyperswarm on the same machine."*
 
 The integration test at `packages/p2p-runtime/tests/replicate.test.ts` exercises the replication code path without the network (direct duplex pipe). This script exercises **discovery + transport** through the real swarm.
 
-## What it doesn't prove
+## What It Doesn't Prove
 
 - Cross-process replication (both peers run inside one Node process here).
 - Replication across machines (no NAT traversal in scope yet).

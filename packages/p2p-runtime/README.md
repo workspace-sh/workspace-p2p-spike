@@ -2,7 +2,7 @@
 
 P2P runtime interface + per-platform implementations. The TypeScript shape every Workspace surface (web, mobile via Expo, macOS via react-native-macos, eventually Windows) talks to.
 
-**Status: skeleton.** All implementations throw. Phase 1 of [PLAN.md](../../PLAN.md) fills in `runtime.node.ts`. Subsequent phases fill in the rest.
+**Status: Phase 1 done.** `runtime.node.ts` is implemented (corestore + hyperswarm) and verified end-to-end via [`apps/node`](../../apps/node). Phases 2 (BareKit on iOS/Android) and 3 (RN-macOS + spawned Node) are not yet started.
 
 ## Shape
 
@@ -19,7 +19,7 @@ await log.append(new TextEncoder().encode('hello'));
 await runtime.joinTopic('…32-byte-hex…');
 ```
 
-## Platform resolution
+## Platform Resolution
 
 The bundler picks the matching `runtime.<platform>.ts`:
 
@@ -38,6 +38,6 @@ For plain Node consumers (the Phase 1 smoke test, the spawned-Node child on macO
 import { createRuntime } from '@workspace/p2p-runtime/node';
 ```
 
-## Why this shape
+## Why This Shape
 
 The interface is deliberately small (`createLog` / `openLog` / `joinTopic` / `leaveTopic`) so the same TypeScript surface compiles unchanged across hosts that route to wildly different runtimes underneath — a Bare worklet on mobile, a spawned Node child on macOS, a stub on web. See PLAN.md Phase 4 for the design rationale.
