@@ -53,7 +53,9 @@ class NodeLog implements Log {
   }
 
   async append(block: Uint8Array): Promise<number> {
-    return await this.core.append(b4a.from(block));
+    const result = await this.core.append(b4a.from(block));
+    // Hypercore v10 returns { length, byteLength }; extract the new log length.
+    return (result as { length: number }).length;
   }
 
   async get(index: number): Promise<Uint8Array> {
