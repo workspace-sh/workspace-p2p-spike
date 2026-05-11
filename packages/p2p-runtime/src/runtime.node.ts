@@ -24,6 +24,7 @@ import type {
   P2PRuntime,
   TopicId,
 } from './types.ts';
+import { didFromSeed } from './did.ts';
 
 // ----------------------------------------------------------------------------
 // Log wrapper around a Hypercore
@@ -114,15 +115,12 @@ export class NodeRuntime implements P2PRuntime {
       this.store.replicate(conn);
     });
 
-    // Stable per-store identifier. Encoded as `did:key:z<hex>` purely so the
-    // surface compiles against the `did:key:` type — the `z` is the multibase
-    // prefix that real ed25519 did:key encoding uses.
-    //
-    // PLACEHOLDER: this is NOT a standards-compliant did:key. The future UCAN
-    // spike replaces this with a real ed25519 keypair encoded per the did:key
-    // method spec. For Phase 1 we only need a stable identifier.
+    // Derive a standards-compliant did:key from the store's ed25519 seed.
+    // didFromSeed uses hypercore-crypto (sodium-universal) to expand the seed
+    // to a public key, then encodes it per the did:key spec (multicodec +
+    // base58btc). The result is a did:key:z6Mk… that ucanto will accept.
     const pk = this.store.primaryKey as Uint8Array;
-    this.didCache = `did:key:z${b4a.toString(pk, 'hex')}` as Did;
+    this.didCache = didFromSeed(pk);
     this.opened = true;
   }
 

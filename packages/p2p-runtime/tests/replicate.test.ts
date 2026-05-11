@@ -103,7 +103,7 @@ test('runtime DID is stable across operations and shaped as did:key:z…', async
   const did3 = a.did();
   assert.equal(did1, did2);
   assert.equal(did2, did3);
-  assert.match(did1, /^did:key:z[0-9a-f]+$/);
+  assert.match(did1, /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]+$/);
 });
 
 test('open the same log twice returns the cached handle', async (t) => {

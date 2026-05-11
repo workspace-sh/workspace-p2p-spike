@@ -26,7 +26,7 @@ test('spawn → init → did (round-trip)', async (t) => {
     await r.close();
   });
   const did = r.did();
-  assert.match(did, /^did:key:z[0-9a-f]+$/);
+  assert.match(did, /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]+$/);
 });
 
 test('createLog returns a writable log handle with length 0', async (t) => {
