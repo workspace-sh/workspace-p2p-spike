@@ -1,14 +1,12 @@
-// Parent client. Spawns a Node child and proxies P2PRuntime calls over the
+// Parent client. Drives a NodeRuntime running in a child process via the
 // JSON-RPC protocol defined in ./protocol.ts.
 //
-// This is the Node-side parent — it uses `child_process.spawn`. The macOS
-// TurboModule parent (Phase 3b) will mirror this shape but spawn via
-// `NSTask` instead. The wire protocol is identical.
-
-import { spawn } from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+// SpawnedRuntime is transport-agnostic: it takes any Transport and proxies
+// P2PRuntime calls over the wire. The concrete transport (how the child was
+// spawned, how bytes flow) is the caller's concern:
+//
+//   - NodeTransport  (child_process.spawn)  — used by tests + apps/node
+//   - MacOSTransport (NSTask via TurboModule) — used by apps/macos (Phase 3b)
 
 import type {
   CreateRuntimeOptions,
@@ -18,11 +16,13 @@ import type {
   P2PRuntime,
   TopicId,
 } from '../types.ts';
-import { encode, LineDecoder } from './framing.ts';
+import { encode } from './framing.ts';
+import { NodeTransport } from './transport.node.ts';
+import type { NodeTransportOptions } from './transport.node.ts';
+import type { Transport } from './transport.ts';
 import type {
   AppendBlockResult,
   AppendEvent,
-  DidResult,
   GetBlockResult,
   InitResult,
   LogHandleResult,
@@ -31,11 +31,6 @@ import type {
   Params,
   Request,
 } from './protocol.ts';
-
-// ----- Resolve child entrypoint relative to this file ----------------------
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const CHILD_BIN = resolve(HERE, 'child-bin.ts');
 
 // ----------------------------------------------------------------------------
 // Pending-request map
@@ -110,55 +105,45 @@ class SpawnedLog implements Log {
 // Runtime
 // ----------------------------------------------------------------------------
 
-export interface SpawnedRuntimeOptions extends CreateRuntimeOptions {
-  /** Override the spawned Node binary. Defaults to `process.execPath`. */
-  nodeBin?: string;
-  /** Extra args before the script path (e.g. extra --enable-... flags). */
-  nodeArgs?: string[];
+export interface SpawnedRuntimeOptions extends CreateRuntimeOptions, NodeTransportOptions {
+  /**
+   * Pre-initialised transport. When provided, SpawnedRuntime uses it directly
+   * and the nodeBin / nodeArgs / scriptPath options are ignored.
+   * Used by the macOS path (transport = MacOSTransport) and unit tests.
+   */
+  transport?: Transport;
 }
 
 export class SpawnedRuntime implements P2PRuntime {
-  private child: ChildProcess | null = null;
-  private decoder = new LineDecoder();
+  private transport: Transport;
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private logs = new Map<LogKey, SpawnedLog>();
   private didCache: Did | null = null;
   private storage: string | null;
-  private nodeBin: string;
-  private nodeArgs: string[];
+  private _ready = false;
 
   constructor(opts: SpawnedRuntimeOptions = {}) {
     this.storage = opts.storage ?? null;
-    this.nodeBin = opts.nodeBin ?? process.execPath;
-    this.nodeArgs = opts.nodeArgs ?? [];
+    this.transport =
+      opts.transport ??
+      new NodeTransport({
+        nodeBin: opts.nodeBin,
+        nodeArgs: opts.nodeArgs,
+        scriptPath: opts.scriptPath,
+      });
   }
 
   async ready(): Promise<void> {
-    if (this.child) return;
-    this.child = spawn(
-      this.nodeBin,
-      [
-        '--experimental-strip-types',
-        '--no-warnings',
-        ...this.nodeArgs,
-        CHILD_BIN,
-      ],
-      { stdio: ['pipe', 'pipe', 'inherit'] },
-    );
+    if (this._ready) return;
 
-    this.child.stdout!.setEncoding('utf8');
-    this.child.stdout!.on('data', (chunk: string) => {
-      const messages = this.decoder.feed(chunk);
-      for (const m of messages) this.handleMessage(m);
-    });
-
-    this.child.on('exit', (code) => {
-      // Reject every still-pending request so callers don't hang.
+    // Wire up message + exit handlers before sending any RPC.
+    this.transport.onMessage((msg) => this.handleMessage(msg));
+    this.transport.onExit((code) => {
       const err = new Error(`child exited (code=${code})`);
       for (const p of this.pending.values()) p.reject(err);
       this.pending.clear();
-      this.child = null;
+      this._ready = false;
     });
 
     const r = (await this.__rpc({
@@ -166,6 +151,7 @@ export class SpawnedRuntime implements P2PRuntime {
       storage: this.storage,
     })) as InitResult;
     this.didCache = r.did as Did;
+    this._ready = true;
   }
 
   did(): Did {
@@ -198,40 +184,31 @@ export class SpawnedRuntime implements P2PRuntime {
   }
 
   async close(): Promise<void> {
-    if (!this.child) return;
+    if (!this._ready && this.transport.closed) return;
     try {
       await this.__rpc({ method: 'shutdown' });
     } catch {
-      /* if the child already died, fall through */
+      /* child may already be dead */
     }
-    if (this.child) {
-      this.child.stdin!.end();
-      // Wait for exit so tests don't race against process cleanup.
-      await new Promise<void>((res) => {
-        const c = this.child;
-        if (!c) return res();
-        if (c.exitCode != null) return res();
-        c.once('exit', () => res());
-      });
-      this.child = null;
-    }
+    await this.transport.close();
+    this._ready = false;
   }
 
   // --------------------------------------------------------------------------
-  // Internal RPC plumbing — exposed double-underscore so log proxies can use
-  // them. Not part of the P2PRuntime interface.
+  // Internal RPC plumbing — exposed double-underscore so log proxies and
+  // tests can reach it. Not part of the P2PRuntime interface.
   // --------------------------------------------------------------------------
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
   __rpc(params: Params): Promise<unknown> {
-    if (!this.child) {
+    if (!this._ready && this.transport.closed) {
       return Promise.reject(new Error('Runtime not ready — await ready() first'));
     }
     const id = this.nextId++;
     const req: Request = { id, method: params.method as Method, params };
     return new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.child!.stdin!.write(encode(req));
+      this.transport.send(encode(req));
     });
   }
 
@@ -254,7 +231,7 @@ export class SpawnedRuntime implements P2PRuntime {
   }
 }
 
-// ----- hex helpers (mirror of ipc/child.ts) -------------------------------
+// ----- hex helpers -----------------------------------------------------------
 
 function hexToBytes(hex: string): Uint8Array {
   if (hex.length % 2 !== 0) throw new Error('odd-length hex');
@@ -273,5 +250,7 @@ function bytesToHex(b: Uint8Array): string {
   return s;
 }
 
-// Re-export so `OkResult` etc. are accessible to test code if they want them.
-export type { LogHandleResult, AppendEvent, DidResult, OkResult };
+// Re-export types so callers that only import from parent.ts get them.
+export type { LogHandleResult, AppendEvent, InitResult, OkResult };
+export type { Transport } from './transport.ts';
+export type { NodeTransportOptions } from './transport.node.ts';
