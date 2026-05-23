@@ -341,6 +341,12 @@ address is never shared with the wider org.
 
 ## Cross-references
 
+- [`threat-model.md`](./threat-model.md) — the contract this protocol
+  serves (what Workspace protects, what it doesn't, forward-only
+  revocation, audit trail = delegation chain)
+- [`workspace-format.md`](./workspace-format.md) — the `.workspace`
+  container format that distributes the artefacts this protocol
+  produces
 - [`FINDINGS.md`](../FINDINGS.md) — spike verdict + extraction checklist
 - [`docs/ucan-prior-research.md`](./ucan-prior-research.md) — UCAN
   notes from the earlier spike (ucanto `canIssue` gotcha, etc.)
