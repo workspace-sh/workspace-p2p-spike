@@ -1,4 +1,4 @@
-# threat model
+# Threat Model
 
 What Workspace protects against, and — equally important — what it does
 not. The cryptographic detail lives in
@@ -10,7 +10,7 @@ played makes the moves comprehensible.
 
 ---
 
-## the contract, in one paragraph
+## The contract, in one paragraph
 
 Workspace protects data in transit between peers and gates access by
 unauthorised peers. It accepts that once an authorised peer has
@@ -25,7 +25,7 @@ about what software can and cannot do.
 
 ---
 
-## what Workspace protects
+## What Workspace protects
 
 - **Data in transit between peers.** All replication runs over
   Hyperswarm's noise-encrypted streams. A passive observer on the
@@ -47,7 +47,7 @@ about what software can and cannot do.
 
 ---
 
-## what Workspace does not protect
+## What Workspace does not protect
 
 These are not bugs. They are accepted realities of any system that
 delivers data to clients.
@@ -83,7 +83,7 @@ say so than to add theatre.
 
 ---
 
-## forward-only revocation, in plain terms
+## Forward-only revocation, in plain terms
 
 If Bob had access to Alice's salary yesterday and is revoked today, he
 **still has** what he saw yesterday. He could have screenshotted it,
@@ -104,7 +104,7 @@ Hyperswarm topic). Both are forward-only. Both are honest.
 
 ---
 
-## at-rest protection is environmental
+## At-rest protection is environmental
 
 A previous draft of these docs implied OS disk encryption was "the
 right layer" for at-rest protection. That phrasing was misleading.
@@ -124,7 +124,7 @@ solve problems it cannot solve.
 
 ---
 
-## audit trail = the delegation chain
+## Audit trail = the delegation chain
 
 A traditional audit log records actions: "Bob opened the salary field
 at 14:32 on March 5." In a peer-to-peer system that decrypts data on
@@ -150,7 +150,7 @@ The delegation chain is append-only, distributed, offline-verifiable,
 and signed end-to-end. It cannot be tampered with or back-dated. It
 answers every audit question that's actually answerable.
 
-### what the chain does not tell you
+### What the chain does not tell you
 
 - Whether Bob *actually* read X (he could have, that's the point)
 - Whether Bob exfiltrated X (out of scope per the contract above)
@@ -161,7 +161,7 @@ separate logging layer would be needed. That layer is not currently
 designed and would not be tamper-evident in a P2P setting without
 introducing a trusted recorder — a tension worth being explicit about.
 
-### history.ndjson is a projection of the chain
+### `history.ndjson` is a projection of the chain
 
 PR #26 against `table-file-format` lists `history.ndjson` as "the
 reserved extension for an audit log." Under this framing,
@@ -172,7 +172,7 @@ chain is the source of truth; the projection makes it queryable.
 This avoids the dual-source-of-truth problem (two logs that can drift)
 and inherits the chain's tamper-evidence for free.
 
-### reading the audit trail is itself a capability
+### Reading the audit trail is itself a capability
 
 Not every member of an org should be able to enumerate "here is who
 has access to what." That ability is itself a UCAN — held by admins,
@@ -181,7 +181,7 @@ nicely into the same capability model the rest of the system uses.
 
 ---
 
-## explicit not-in-scope list
+## Explicit not-in-scope list
 
 Listing these out so future contributors don't waste effort proposing
 solutions to problems the contract has already declined:
@@ -205,7 +205,7 @@ solutions to problems the contract has already declined:
 
 ---
 
-## summary
+## Summary
 
 | What                                       | In scope? |
 |--------------------------------------------|-----------|
@@ -226,7 +226,7 @@ design property.
 
 ---
 
-## cross-references
+## Cross-references
 
 - [`permissions-model.md`](./permissions-model.md) — the cryptographic
   detail this contract serves

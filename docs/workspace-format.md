@@ -1,4 +1,4 @@
-# .workspace — file format (v0, early spec)
+# .workspace — File Format (v0, Early Spec)
 
 **Status:** early. Shape expected to change as
 [`permissions-model.md`](./permissions-model.md) implementation work
@@ -7,7 +7,7 @@ app decisions made today don't paint us into a corner.
 
 ---
 
-## one-paragraph summary
+## One-paragraph summary
 
 A `.workspace` is a folder — or an archive of one — that contains a
 collection of files plus the metadata needed to sync them and enforce
@@ -24,7 +24,7 @@ clean; the container does the work.
 
 ---
 
-## what a workspace is
+## What a workspace is
 
 ```
 my-org.workspace/                    ← the workspace (folder or archive thereof)
@@ -58,11 +58,11 @@ workspace on the other side.
 
 ---
 
-## two layers, separated by responsibility
+## Two layers, separated by responsibility
 
 The workspace has two layers that coexist on disk:
 
-### layer 1 — working tree (human-facing)
+### Layer 1 — working tree (human-facing)
 
 The files the user sees. Plaintext. Format-pure (a `.md` is a
 real `.md`, openable in any markdown editor). The user can `cat`
@@ -74,7 +74,7 @@ tree shows the field as `<no access>` (decision pending — see open
 questions). The field's existence is declared in `schema.json`
 regardless; the value is what gets hidden.
 
-### layer 2 — container metadata (machine-facing)
+### Layer 2 — container metadata (machine-facing)
 
 The `_workspace/` subdirectory. Holds:
 
@@ -99,7 +99,7 @@ plaintext; `.git/` is opaque. Both layers exist on disk simultaneously.
 
 ---
 
-## permission semantics
+## Permission semantics
 
 A workspace can contain a mix of:
 
@@ -117,7 +117,7 @@ they hold, which is the union of every UCAN delegation chain that
 terminates at their DID. The audit trail is the chain itself
 ([`threat-model.md`](./threat-model.md)).
 
-### file-format-specific semantics
+### File-format-specific semantics
 
 - **`.md`, `.canvas`** — flat permission model. Three roles per file:
   `read`, `edit`, `admin`. One symmetric key per file (or
@@ -135,11 +135,11 @@ Refer to
 
 ---
 
-## portability
+## Portability
 
 Three portability stories the format must serve:
 
-### file out of workspace
+### File out of workspace
 
 Move a `.md` or `.table/` out of a workspace and it's just a file.
 Plain markdown, plain table. Any tool that handles the format handles
@@ -148,7 +148,7 @@ the file. No encryption, no permission model, no Workspace dependency.
 This is the default for `.table`'s portability story: the file format
 is clean and self-contained outside the container.
 
-### workspace as snapshot
+### Workspace as snapshot
 
 Tar / zip the entire `my-org.workspace/` directory. The archive
 contains everything: the working tree, the manifest, the attestation,
@@ -164,7 +164,7 @@ the envelopes, the Hypercore store. Hand it to anyone:
 The archive form is the unit of distribution. Offline delivery
 (AirDrop, USB) is a first-class case, not an afterthought.
 
-### workspace as live state
+### Workspace as live state
 
 The unarchived folder, sitting on disk, is the live state. Workspace
 watches the working tree, commits user edits into the Hypercore store,
@@ -173,7 +173,7 @@ tree. The two layers stay in sync.
 
 ---
 
-## what the format is not
+## What the format is not
 
 - **Not a redefinition of the file formats inside it.** `.md` is still
   `.md`. `.canvas` is still `.canvas`. `.table` is still `.table`. The
@@ -189,7 +189,7 @@ tree. The two layers stay in sync.
 
 ---
 
-## open design questions
+## Open design questions
 
 Explicit so future contributors don't quietly pick defaults:
 
@@ -237,7 +237,7 @@ inform the answers.
 
 ---
 
-## relationship to the wider spike
+## Relationship to the wider spike
 
 This format is the **container** for everything the permissions model
 delivers. The model defines the cryptographic protocol; the format
@@ -261,7 +261,7 @@ Implementation work that materially affects this format:
 
 ---
 
-## cross-references
+## Cross-references
 
 - [`threat-model.md`](./threat-model.md) — the contract this format
   serves
