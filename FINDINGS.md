@@ -37,12 +37,39 @@ The JS surface (`P2PRuntime` interface) is identical across all platforms. Only 
 
 ---
 
+## What Was Designed (not yet implemented)
+
+### Permissions model (`docs/permissions-model.md`)
+
+A full design for tiered access control on Hypercore logs using UCAN
+delegation, symmetric encryption per tier, Autobase for multi-writer
+collaboration, and a key delivery channel that itself rides on
+Hypercore. Includes a worked example (54-person org), revocation
+levers (encryption layer + topic layer), and a scaling story (simple
+model to ~500 peers, MLS as the upgrade path beyond 10k).
+
+Validated as workable; every component is either in production today
+(Autobase, ucanto) or has a well-trodden standards-based answer
+(MLS / RFC 9420). No research-grade cryptography required.
+
+The consumer-facing view of the same model lives in
+[`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md).
+
+### DID identity
+
+`did:key:z6Mk…` derivation from Corestore's `primaryKey` is now
+**implemented** (`packages/p2p-runtime/src/did.ts`). The format matches
+what ucanto expects in delegation chains. One keypair, one identity,
+no translation layer.
+
+---
+
 ## Open Questions (not blockers)
 
-- **Mobile (Phase 2)** — react-native-bare-kit is the likely path for iOS/Android. Not spiked; treat as a separate workstream.
+- **Mobile (Phase 2)** — react-native-bare-kit is the likely path for iOS/Android. Not spiked; treat as a separate workstream. ([#6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6))
 - **Node binary on macOS** — development uses the system `node`; a production RN-macOS app needs a bundled static binary or an assumption that Node is present. Either is tractable.
 - **Corestore persistence** — `:memory:` is a temp directory under the hood. Production storage path needs to be wired to the app's sandbox container.
-- **DID identity** — current `did:key:z<hex>` is a placeholder derived from Corestore's `primaryKey`. Not standards-compliant. Requires a proper ed25519 keypair + multibase encoding before shipping. See `docs/ucan-prior-research.md`.
+- **Permissions implementation** — design is complete; implementation is the next major piece. Key pieces: UCAN delegation via ucanto, Autobase for multi-writer, key delivery Hypercore log, Hyperswarm topic-layer authentication. ([#5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5))
 
 ---
 
