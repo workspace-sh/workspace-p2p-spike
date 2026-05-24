@@ -9,3 +9,16 @@ export type {
   LogKey,
   CreateRuntimeOptions,
 } from './types.ts';
+
+// Crypto primitives — exposed because they're independently useful (e.g. to
+// @workspace/portable-bootstrap which composes them into the bundle format).
+export { didFromSeed, didFromPublicKey, publicKeyFromDid } from './did.ts';
+export { wrap, unwrap, WRAP_OVERHEAD } from './wrap.ts';
+export {
+  sign,
+  verify,
+  buildAttestationPayload,
+  signWorkspaceAttestation,
+  verifyWorkspaceAttestation,
+} from './attestation.ts';
+export type { AttestationPayload, SignedAttestation } from './attestation.ts';
