@@ -181,6 +181,73 @@ nicely into the same capability model the rest of the system uses.
 
 ---
 
+## Cooperative client behaviour — the policy file
+
+Some desirable behaviours on revocation (delete local files, clear
+caches, show the user a notification) cannot be cryptographically
+enforced — they depend on the client running the cleanup. Workspace
+addresses this with a **workspace policy file** signed by the root
+DID: `_workspace/policy.json` (see
+[`workspace-format.md`](./workspace-format.md) for the schema). The
+policy declares what cooperating apps *should* do on lifecycle events
+(revocation, key rotation, workspace deletion). A revocation notice
+block on the live key delivery log (see
+[`permissions-model.md`](./permissions-model.md)) carries the trigger.
+
+### What this protects
+
+In the **cooperating-client case** (the user is running a real
+Workspace app, kept up to date, connected to the swarm on a normal
+schedule): the policy file's directives are honoured. On revocation,
+the user is notified; their local working tree is cleaned up
+according to policy; their local key state is cleared. The 95% of
+real-world cases.
+
+### What this does not protect
+
+In the **adversarial-client case**: a motivated user can run a
+modified Workspace client that reads the policy and ignores it.
+They can also stay offline indefinitely after taking a snapshot,
+never receiving the revocation notice and never running the cleanup.
+
+The policy is honest about being a hint, not a directive.
+Cryptographic enforcement carries the security load (forward-only
+revocation: rotated keys, rejected handshakes). The policy file is
+what makes the cooperating-client cleanup happen cleanly — not what
+makes revocation work.
+
+### The replicated-state property
+
+A user cannot escape the policy by deleting the local file. Both
+the policy file and any revocation notice are part of the workspace's
+**replicated state**, distributed via Hypercore. Local tampering does
+not work because the next sync restores the canonical state from
+peers. The only paths to evade cooperative-client behaviour are:
+
+- Run a forked or modified client that ignores the policy
+- Stay offline forever after a pre-revocation snapshot
+
+Both require engineering or accepting permanent disconnection.
+Neither is a one-liner.
+
+### Why this is still worth doing
+
+Two reasons, beyond the obvious one of "most users use cooperating
+clients":
+
+1. **Compliance / legal cover.** When an admin clicks "remove user"
+   and the user's cooperating app deletes their local copy, the org
+   has a documented chain of "we asked the system to remove access;
+   the system did its job." If the user kept screenshots or backups
+   outside the cooperating client, that's a separate (legal /
+   contractual) matter — but Workspace's behaviour was correct.
+2. **It's the same trade every comparable tool makes.** Google Docs,
+   Notion, Linear, iCloud all rely on cooperating clients honouring
+   server-issued cleanup directives. A determined user can defeat any
+   of them. The contract is honest about its limits.
+
+---
+
 ## Explicit not-in-scope list
 
 Listing these out so future contributors don't waste effort proposing
@@ -229,9 +296,13 @@ design property.
 ## Cross-references
 
 - [`permissions-model.md`](./permissions-model.md) — the cryptographic
-  detail this contract serves
+  detail this contract serves (including the revocation notice block
+  format that triggers cooperative-client cleanup)
 - [`workspace-format.md`](./workspace-format.md) — the container shape
-  that distributes the artefacts this contract protects
+  that distributes the artefacts this contract protects, including
+  the schema for the `_workspace/policy.json` file
+- [`risks.md`](./risks.md) — where this could fail and what we're
+  doing about it
 - [`ucan-prior-research.md`](./ucan-prior-research.md) — UCAN-side
   research notes; the `canIssue` and revocation gotchas matter for the
   delegation-chain audit trail
