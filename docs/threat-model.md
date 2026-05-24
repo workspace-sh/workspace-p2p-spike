@@ -106,14 +106,11 @@ Hyperswarm topic). Both are forward-only. Both are honest.
 
 ## At-rest protection is environmental
 
-A previous draft of these docs implied OS disk encryption was "the
-right layer" for at-rest protection. That phrasing was misleading.
-
-The accurate statement is: **Workspace does not enforce at-rest
-encryption on the working tree, does not rely on it for its security
-guarantees, and does not claim to provide it.** Whatever your OS does
-is what you get. On managed devices the IT department's MDM may
-require disk encryption; on personal devices it is the user's choice.
+**Workspace does not enforce at-rest encryption on the working tree,
+does not rely on it for its security guarantees, and does not claim
+to provide it.** Whatever your operating environment provides is what
+you get. On managed devices the IT department's MDM may require disk
+encryption; on personal devices it is the user's choice.
 
 Mobile (iOS, Android) provides at-rest encryption automatically when
 the device is locked, derived from the user's passcode. Workspace does

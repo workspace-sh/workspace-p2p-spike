@@ -453,7 +453,7 @@ address is never shared with the wider org.
   doing about it
 - [`FINDINGS.md`](../FINDINGS.md) — spike verdict + extraction checklist
 - [`docs/ucan-prior-research.md`](./ucan-prior-research.md) — UCAN
-  notes from the earlier spike (ucanto `canIssue` gotcha, etc.)
+  library notes (ucanto `canIssue` gotcha, library comparison)
 - [`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md) —
   consumer-side view of this same model, per file type
 - [Issue #5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5) —
