@@ -1,6 +1,6 @@
 # UCAN + Hypercore prior research (April 2026)
 
-Notes from a parallel exploration that ran briefly before this spike's scope was clarified. The work is **out of scope here** (PLAN.md explicitly defers UCAN to a later spike) but the findings are preserved for whoever picks up the UCAN integration thread later.
+Notes from a parallel UCAN+Hypercore exploration that ran before the current permissions-layer work. Preserved for context — the library comparison, the `canIssue` gotcha, the boundary-module pattern, and the 10-scenario test matrix continue to inform implementation choices in `@workspace/ucan-boundary`.
 
 The exploration built three in-process peer nodes, gave them ed25519 / did:key identities, used [@ucanto/core](https://www.npmjs.com/package/@ucanto/core) for capability minting + chain validation, and ran a 10-scenario integration test covering role grants, sub-delegation, revocation cascade, and expiry. **All 10 scenarios passed.**
 

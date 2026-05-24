@@ -98,7 +98,6 @@ workspace was distributed.
 ```
 .
 ├── README.md                            ← you are here
-├── PLAN.md                              ← original spike scope
 ├── FINDINGS.md                          ← spike outcomes + extraction checklist
 ├── docs/
 │   ├── workspace-format.md              ← .workspace format spec + workspace:// URI

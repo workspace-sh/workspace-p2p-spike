@@ -2,7 +2,7 @@
 
 **Verdict: Go.**
 
-Hypercore is a viable P2P data layer for Workspace across Node, macOS, and (by extension) mobile. The open questions from PLAN.md are answered.
+Hypercore is a viable P2P data layer for Workspace across Node, macOS, and (by extension) mobile.
 
 ---
 
