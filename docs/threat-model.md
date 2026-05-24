@@ -152,11 +152,67 @@ answers every audit question that's actually answerable.
 - Whether Bob *actually* read X (he could have, that's the point)
 - Whether Bob exfiltrated X (out of scope per the contract above)
 
-If regulatory or contractual requirements demand action-level proof
-("show me every read of this row"), the chain is insufficient and a
-separate logging layer would be needed. That layer is not currently
-designed and would not be tamper-evident in a P2P setting without
-introducing a trusted recorder — a tension worth being explicit about.
+### Action-level audit, when needed — policy opt-in
+
+For regulatory or contractual regimes that demand action-level
+evidence ("show me every read of this row"), the workspace policy
+file ([`workspace-format.md`](./workspace-format.md)) can opt into
+**signed action logging**. When enabled, cooperating clients append
+a signed event to a dedicated audit Hypercore on every decrypt
+(and/or every encrypted write):
+
+```json
+{
+  "actor":     "did:key:zBob…",
+  "action":    "decrypt",
+  "subject":   "employees.table/r1/salary",
+  "timestamp": 1717200000,
+  "client":    "Workspace/1.2.3",
+  "signature": "<base64>"
+}
+```
+
+Each event is signed by the actor's key — tamper-evident from that
+peer's side. The audit log is itself tier-gated: only holders of the
+audit-read capability (admins, designated auditors) can read it.
+
+**The honest limits:**
+
+- **Cooperating-client only.** A modified client can refuse to log,
+  log selectively, or log false events. The cryptographic
+  layer cannot force action logging.
+- **Self-signed.** Bob signs his own log entries. He can omit
+  events; he can fabricate them. There is no external attestation
+  that the log is complete.
+- **Doesn't capture out-of-band exfil.** A screenshot taken while
+  Bob's workspace app shows the decrypted value is not logged.
+  The log records what the app did, not what the user did with
+  what the app showed them.
+- **Privacy implications.** Comprehensive read logs are a
+  surveillance tool. Cooperating users may legitimately object even
+  when consenting to the broader data-use contract. Workspaces with
+  audit logging enabled should disclose this prominently at join
+  time.
+
+**When this is enough:**
+
+Compliance regimes that accept "the cooperating client recorded
+this" as evidence (most SOC 2 control objectives, many internal
+audits, contractual obligations between consenting parties).
+
+**When this is not enough:**
+
+Adversarial-witness regimes that require third-party attestation of
+every access event (some financial-services audit, some legal
+discovery contexts). For these, a P2P design cannot provide the
+required tamper-proof centralised log without introducing a trusted
+recorder — a tension worth being explicit about. Workspace is not
+the right tool for those regimes; we don't pretend it is.
+
+The mechanism reuses the same Hypercore + signature primitives the
+rest of the system uses. Schema for enabling it is documented in
+[`workspace-format.md`](./workspace-format.md) under the policy
+file.
 
 ### `history.ndjson` is a projection of the chain
 
@@ -255,9 +311,11 @@ solutions to problems the contract has already declined:
 - **Copy/paste blocking on decrypted content** — same.
 - **DRM-style "view but cannot save"** — same; cryptographically
   incoherent in a P2P setting.
-- **Tracking who decrypted what when (action-level audit)** — possible
-  in principle but unfalsifiable in a P2P design (each peer controls
-  their own logs); not attempted in v1.
+- **Tracking who decrypted what when, in a cryptographically
+  enforced way** — impossible in a P2P design without a trusted
+  recorder. A cooperating-client opt-in is available via the
+  workspace policy file (see "Action-level audit, when needed"
+  above); honest about its limits.
 - **Post-revocation forgetting (re-encrypting historical blocks the
   ex-peer holds)** — Hypercore is append-only; this would require a
   full re-publication and is incoherent with the data layer's design.

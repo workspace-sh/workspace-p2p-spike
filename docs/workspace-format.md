@@ -227,18 +227,65 @@ honoured by well-behaved Workspace clients.
     "confirmation": "ask-user"
   },
   "onTierKeyRotated": { "notify": false },
-  "onWorkspaceDeleted": { "notify": true, "deleteEverything": true, "confirmation": "ask-user" }
+  "onWorkspaceDeleted": { "notify": true, "deleteEverything": true, "confirmation": "ask-user" },
+  "audit": {
+    "logReads":  false,
+    "logWrites": false,
+    "scope":     "tier-gated-only",
+    "destination": "audit-log",
+    "readCapability": "workspace/audit"
+  }
 }
 ```
 
-Honest framing: this is a **hint to cooperating apps**, not a
-cryptographic enforcement mechanism. A modified client can ignore it.
-A user who stays offline forever never receives the policy updates.
-The encrypted store remains sealed against unauthorised viewers
+### Action logging — opt-in for compliance use cases
+
+The `audit` block declares whether cooperating clients should append
+signed action events (decrypt and/or write) to a dedicated audit
+Hypercore. When `logReads` or `logWrites` is true, the Workspace app
+appends one signed block per action:
+
+```json
+{
+  "actor":     "did:key:zBob…",
+  "action":    "decrypt",
+  "subject":   "employees.table/r1/salary",
+  "timestamp": 1717200000,
+  "client":    "Workspace/1.2.3",
+  "signature": "<base64>"
+}
+```
+
+`scope` can be `"tier-gated-only"` (log only sensitive content, the
+typical compliance posture) or `"everything"` (log all reads, including
+workspace-public content — heavyweight, rarely useful).
+
+The audit log itself is gated by `readCapability`: only peers holding
+the named capability can read it. This is a UCAN like any other
+capability; admins and designated auditors hold it, regular members
+do not.
+
+**Honest framing of the audit option:** it is a cooperating-client
+hint, not cryptographic enforcement. A modified client can refuse to
+log or log false events. See
+[`threat-model.md`](./threat-model.md) ("Action-level audit, when
+needed") for the contract details and when this evidence is
+sufficient.
+
+When `audit.logReads` is enabled, workspaces should disclose this at
+join time. Logging member activity is a privacy-relevant policy
+choice; members deserve to know.
+
+### Honest framing of the rest of the policy file
+
+This is a **hint to cooperating apps**, not a cryptographic
+enforcement mechanism. A modified client can ignore it. A user who
+stays offline forever never receives the policy updates. The
+encrypted store remains sealed against unauthorised viewers
 regardless (cryptographic enforcement carries that load). The policy
 file is what makes the 95% of cooperating clients clean up cleanly
 on revocation. See [`threat-model.md`](./threat-model.md) for the
-contract details.
+full contract.
 
 Replicated state property: the policy file is part of the
 workspace's replicated state. Deleting the local copy does not
