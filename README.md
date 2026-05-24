@@ -52,9 +52,9 @@ full format spec.
 
 | | |
 |---|---|
-| Phase 1 — Node runtime (Hypercore + Hyperswarm) | done |
-| Phase 3a — JSON-RPC IPC over stdio | done |
-| Phase 3b — macOS TurboModule (NSTask) | done |
+| Node runtime — Hypercore + Hyperswarm | done |
+| IPC layer — JSON-RPC over stdio | done |
+| macOS TurboModule — NSTask spawning | done |
 | Permissions layer — wrap primitive | implemented |
 | Permissions layer — UCAN delegation boundary | implemented |
 | Permissions layer — root attestation | implemented |
@@ -99,7 +99,7 @@ workspace was distributed.
 .
 ├── README.md                            ← you are here
 ├── PLAN.md                              ← original spike scope
-├── FINDINGS.md                          ← Phase 1–3 verdict + extraction checklist
+├── FINDINGS.md                          ← spike outcomes + extraction checklist
 ├── docs/
 │   ├── workspace-format.md              ← .workspace format spec + workspace:// URI
 │   ├── permissions-model.md             ← UCAN + Hypercore protocol design

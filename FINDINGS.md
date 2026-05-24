@@ -8,13 +8,13 @@ Hypercore is a viable P2P data layer for Workspace across Node, macOS, and (by e
 
 ## What Was Proven
 
-### Node (Phase 1)
+### Node runtime
 Hypercore + Hyperswarm run cleanly under Node 20+. Two runtimes on the same machine replicated a log in ~260ms via the real DHT. Corestore v7 requires a filesystem path (RocksDB-backed); `:memory:` is a test shim over a temp directory.
 
-### IPC — spawned Node child (Phase 3a)
+### IPC — spawned Node child
 A parent process drives a `NodeRuntime` in a child process over line-delimited JSON-RPC on stdin/stdout. Full round-trip: `init → createLog → append → get → events → shutdown`. 8 integration tests, all green. The protocol is platform-neutral — the child code is unchanged regardless of who spawns it.
 
-### macOS — NSTask path (Phase 3b)
+### macOS — NSTask path
 Swift's `Process` (= NSTask) spawns the Node child and speaks the same protocol without modification. The Obj-C++ TurboModule (`P2PRuntimeModule.mm`) is written and ready to drop into any RN-macOS project. The Swift probe passed all checks cold.
 
 Bonus: Hypercore's append events crossed the NSTask boundary unprompted. The "zero-cost change signal" from issue #1 — a peer learning a log grew without fetching the payload — works out of the box. No extra wiring required.
@@ -66,7 +66,7 @@ no translation layer.
 
 ## Open Questions (not blockers)
 
-- **Mobile (Phase 2)** — react-native-bare-kit is the likely path for iOS/Android. Not spiked; treat as a separate workstream. ([#6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6))
+- **Mobile** — react-native-bare-kit is the likely path for iOS/Android. Not spiked; treat as a separate workstream. ([#6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6))
 - **Node binary on macOS** — development uses the system `node`; a production RN-macOS app needs a bundled static binary or an assumption that Node is present. Either is tractable.
 - **Corestore persistence** — `:memory:` is a temp directory under the hood. Production storage path needs to be wired to the app's sandbox container.
 - **Permissions implementation** — design is complete; implementation is the next major piece. Key pieces: UCAN delegation via ucanto, Autobase for multi-writer, key delivery Hypercore log, Hyperswarm topic-layer authentication. ([#5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5))
@@ -79,4 +79,4 @@ no translation layer.
 2. Add `apps/macos/native/P2PRuntimeModule.h` + `.mm` to the macOS Xcode target.
 3. Wire `runtime.macos.ts` export in the package — Metro resolves `.macos.ts` automatically.
 4. Set `childScriptPath` + `nodeBin` in the macOS app bootstrap.
-5. Phase 2 (mobile) is a separate spike — `react-native-bare-kit` replaces the NSTask path on iOS/Android.
+5. The mobile path is a separate spike — `react-native-bare-kit` replaces the NSTask path on iOS/Android.

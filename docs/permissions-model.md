@@ -384,8 +384,8 @@ address is never shared with the wider org.
 - **DID encode/decode** — `didFromPublicKey` / `publicKeyFromDid`
   for the bidirectional mapping needed by the wrap primitive and
   attestation flow
-- **Sync layer** — Hypercore + Hyperswarm (Phase 1)
-- **macOS IPC** — NSTask + JSON-RPC (Phase 3b)
+- **Sync layer** — Hypercore + Hyperswarm
+- **macOS IPC** — NSTask + JSON-RPC
 - **Wrap primitive** — X25519 ECDH sealing for delivery envelopes
   (`packages/p2p-runtime/src/wrap.ts`)
 - **Root attestation** — sign + verify over `(workspaceId, createdAt,
@@ -459,4 +459,4 @@ address is never shared with the wider org.
 - [Issue #5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5) —
   UCAN + Hypercore identity bridge (now expanded by this doc)
 - [Issue #6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6) —
-  mobile path (Phase 2)
+  mobile path
