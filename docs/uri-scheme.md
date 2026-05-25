@@ -249,6 +249,28 @@ workspace://v1/z6Mk…/document/4Hp8…#scroll=500&view=outline
 
 Fragments must never be used for routing. Some chat-app previewers strip fragments when generating preview cards; the URL still resolves correctly (the resource opens) but the client-local state may be lost.
 
+### Canonical URIs are fragment-free
+
+A conforming client **MUST NOT** auto-generate fragments in URIs produced by a "share this" / "copy link" action. Canonical URIs as emitted by the workspace app carry no fragment.
+
+### Visible / human-readable slugs — fragment-only, never path or query
+
+If a client (Workspace's or a third party's) ever offers a UX feature that adds a human-readable hint to a shared URI for at-a-glance preview — e.g. so a chat-app preview shows the reader "this points to the *Reporting Process* section" — that hint **MUST** ride in the fragment, never in the path or query.
+
+```
+workspace://v1/z6Mk…/document/4Hp8…/9MnPpQrStUv#hint=reporting-process
+```
+
+Reasoning:
+
+- Path placement would leak the semantic content through every URL-bearing channel (history, logs, screenshots) — defeating the whole reason locators are opaque IDs in the first place.
+- Query placement carries the same leak; query strings are sometimes mangled but they still travel in most contexts.
+- Fragment placement keeps the hint client-local. Routing intermediaries strip or ignore fragments; preview generators that present the URL pre-strip the fragment; the URL's authoritative form (what gets indexed, what's stored in browser history at the server-visible level) doesn't carry it.
+
+The hint is also a **snapshot-at-share-time**: it reflects what the heading was called when the URL was generated. If the heading is later renamed, the hint goes stale. That's harmless — the URL still routes correctly via the opaque ID in the path; the stale hint is just a cosmetic mismatch.
+
+Workspaces with strict privacy posture should use the `policy.json` workspace policy (see [`workspace-format.md`](./workspace-format.md)) to declare `stripFragmentsOnShare: true`, telling cooperating clients to strip any user-added fragments before producing a share link.
+
 ---
 
 ## Resolution flow
