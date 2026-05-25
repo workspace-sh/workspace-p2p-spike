@@ -68,6 +68,33 @@ A block on disk:
 Replication checks the signature. Decryption uses the symmetric key.
 **Two independent gates.**
 
+### A third key for URL locators — `K_url`
+
+Alongside the encryption tier keys, every workspace holds one
+additional symmetric key with a single specific purpose:
+
+- `K_url` — a workspace-stable secret used to HMAC URL locators in
+  formats whose locators would otherwise leak semantics (notably
+  markdown heading slugs; see [`uri-scheme.md`](./uri-scheme.md))
+
+Properties:
+
+- 32 bytes; generated at workspace creation; one per workspace
+- Distributed via the same envelope/key-delivery mechanism as the tier
+  keys
+- Held by every workspace member
+- **Does not rotate** with membership changes — URLs must survive the
+  workspace's lifetime; rotating `K_url` would break every shared link
+  at every revocation event
+- Used only for HMAC computation, never for encryption or
+  authentication
+
+The trade-off worth being explicit about: a revoked member still
+retains `K_url` and can therefore reverse-engineer URL locators back
+to their underlying slugs. But they had already seen the corresponding
+heading text while they were a member — no new information is leaked.
+Forward-only revocation, same contract as everywhere else.
+
 ---
 
 ## Multi-writer — Autobase

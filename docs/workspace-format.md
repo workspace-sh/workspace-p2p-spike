@@ -114,39 +114,38 @@ product where avoiding leaks matters more than terminal convenience.
 
 ## Two ways to view a workspace — file or URL
 
-A workspace can be addressed two ways:
+A workspace can be addressed two ways: as a folder on disk, or as a
+`workspace://` URL. Same identity, two distribution shapes.
 
 ### As a folder on disk
 
 The default. Sits in `~/Documents/`, on a USB stick, in a Dropbox
 folder, anywhere. Open in the Workspace app via double-click or drag.
 
-### As a URL — `workspace://` scheme
+### As a URL — `workspace://`
 
-The same workspace, addressable by URL. The URL encodes the bootstrap
-metadata: workspace ID, root DID, Hyperswarm topic, attestation.
-Carries everything needed for the Workspace app to find and join the
-swarm.
+The URL form encodes everything needed for the Workspace app to find
+and join the workspace's swarm. The shape:
 
 ```
-workspace://acme/wid-abc123?root=did:key:z…&topic=…&attest=…
+workspace://v1/<workspace-pubkey>[/<path>][?<query>]
 ```
 
-Tap the URL on any platform that has the Workspace app installed and
-registers the scheme. App opens, validates the attestation, asks the
-user to confirm, joins the swarm.
+For the full URI scheme spec — including path namespaces, sub-resource
+addressing (`/at/<locator>`), HMAC-keyed slugs for markdown,
+locator alphabets per file format, and the `K_url` key — see
+[`uri-scheme.md`](./uri-scheme.md).
 
-This is the **magnet-link analogue**. Like a BitTorrent magnet, the
-URL is tiny, leaks no sensitive metadata, and can be embedded in any
-text channel: an email, a Slack message, a QR code, a webpage. The
-content lives in the swarm; the URL is the entry ticket.
+This is the **magnet-link analogue**. Tiny URL, leaks no sensitive
+metadata, embeddable in any text channel. The content lives in the
+swarm; the URL is the entry ticket.
 
 ### Two distribution shapes
 
 | Shape | What it carries | When to use |
 |---|---|---|
 | **Heavy bundle** | Full folder including `_workspace/store/` (encrypted bytes) | Self-contained, offline-capable. USB sticks, AirDrop to a colleague who may not be online, archival snapshots. |
-| **Light bundle** (`workspace://` URL or minimal `_workspace/` only) | Just manifest + attestation + envelopes; ~a few KB | URL-shareable. Embed in chat, QR code, web link. Recipient's app fetches encrypted content from peers via Hyperswarm. |
+| **Light bundle** (`workspace://` URL or a `.workspace` folder with only manifest + attestation + envelopes) | ~a few KB; recipient's app fetches encrypted content from peers via Hyperswarm | URL-shareable. Embed in chat, QR code, web link. |
 
 Same recipient experience either way: app validates the attestation,
 finds the envelope addressed to its DID, decrypts and projects the
@@ -628,6 +627,9 @@ Implementation work that materially affects this format:
 
 ## Cross-references
 
+- [`uri-scheme.md`](./uri-scheme.md) — the `workspace://` URI scheme
+  in full (path namespaces, sub-resource addressing, locator alphabets,
+  HMAC-keyed slugs, `K_url`)
 - [`threat-model.md`](./threat-model.md) — the contract this format
   serves
 - [`permissions-model.md`](./permissions-model.md) — the
