@@ -39,7 +39,12 @@ workspace://v1/<workspace-pubkey>[/<path>][?<query>][#<fragment>]
 - `<query>` — optional non-routing metadata (relay hints, friendly hints, etc.)
 - `<fragment>` — optional client-local view state (scroll position, expansion state, etc.); never used for routing
 
-All routing-critical information lives in the path. Query strings carry only optional hints. Fragments carry only client-local view state. This isolates routing from the parts of a URL that some chat apps mangle when generating previews.
+Routing breaks into two layers:
+
+- **Routing-critical** — the workspace pubkey and the document ID. These resolve to a specific document and must succeed. If they fail, the URI is broken.
+- **Best-effort refinement** — the sub-resource locator (`/at/<locator>` in this draft; see the parsing rule below for the v1 form). If a locator doesn't match anything in the current document (heading renamed, row deleted, node removed), the app **soft-fails to the document root**. The user lands in the correct document, just not scrolled to the anchor. Same behaviour as Notion / Google Docs section links.
+
+Query strings carry only optional hints. Fragments carry only client-local view state. This isolates routing from the parts of a URL that some chat apps mangle when generating previews.
 
 ---
 
@@ -144,7 +149,7 @@ workspace://v1/z6Mk…/document/4Hp8KqRtFmYxNbCvDgHpKr/at/2vJxKp9rEqYq
 1. Open the document
 2. For each heading in the document, compute its HMAC
 3. Match the URL's locator → navigate
-4. No match → "section not found, document may have been edited"
+4. No match → **soft-fail to document root** (the document opens at the top; the anchor wasn't found, which is an expected outcome of edits, not an error)
 
 **Resolution** (non-member): cannot compute HMAC, cannot enumerate. Locator is opaque.
 
