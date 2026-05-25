@@ -577,6 +577,140 @@ P2P-native flow) — equally weighted, equally legitimate.
 
 ---
 
+## 8. Identity fusion and format-migration cost
+
+### The risk
+
+The workspace root pubkey is overloaded to serve three roles simultaneously:
+
+1. The workspace's unique identifier (carried in every `workspace://` URL)
+2. The Hyperswarm topic identifier (derived deterministically from the pubkey)
+3. The verifier for the workspace's root attestation (the signature over `manifest.json`)
+
+This fusion is elegant — one key, three jobs, smaller attack surface, no
+state synchronisation between identifier/topic/verifier. It's the right
+design choice. But it creates a coupling: **any change that forces a new
+pubkey breaks all three at once.**
+
+A "large" v2 that requires regenerating the workspace identity isn't really
+v2 — it's **re-genesis**:
+
+- Every `workspace://` URL ever shared breaks (the pubkey is the URL's identifier)
+- The Hyperswarm topic dies (peers can't find each other on the new topic)
+- All envelopes invalidate (they were sealed to keys delegated from the old root)
+- The audit chain restarts (a new root signs fresh attestations)
+
+That's catastrophic for a deployed workspace.
+
+### Position
+
+Commit to **projection-compatible v2s** wherever possible. Most format changes
+don't need to force a new pubkey. For the unavoidable case (crypto-primitive
+change), use a documented **successor-chain attestation** mechanism so old
+URLs continue to resolve during a bounded grace period.
+
+### Mitigation depth
+
+What needs re-genesis vs. what doesn't:
+
+| Change type | Forces new pubkey? | Cost |
+|---|---|---|
+| Add a manifest field, new event type, new path namespace | no | trivial — backward-compatible |
+| URI scheme v1 → v2 (different URL shape, e.g. new fields) | no | both schemes resolve to the same workspace pubkey |
+| New locator alphabet for a format | no | old URLs fail soft to document root (per the soft-fail clause in `uri-scheme.md`) |
+| Hypercore protocol upgrade (Holepunch) | no | log migrates in place |
+| New encryption tier key | no | distributed via existing key delivery |
+| **Crypto-primitive change** (e.g. ed25519 → post-quantum) | **yes** | re-genesis or successor-chain |
+| Switching to a different DID method | yes | re-genesis or successor-chain |
+
+Most things on this list are projection-compatible. Only the bottom two
+force the question.
+
+#### Projection-compatible pattern (the common case)
+
+For changes that don't touch the pubkey:
+
+- The manifest carries a `formatVersion` field
+- Log entries are tagged with the version they were written under
+- Newer readers parse v1 and v2 entries side by side, projecting the
+  current state from the union
+- Older readers see v2 entries and skip them gracefully (or surface
+  "newer Workspace app required" UI for v2-only features)
+
+Standard append-only-log discipline. Cheap to design in from the start.
+
+#### Successor-chain attestation (the re-genesis case)
+
+When a crypto-primitive change is unavoidable, the old root publishes a
+final signed message before retirement:
+
+```json
+{
+  "kind": "successor-attestation",
+  "oldRootDid": "did:key:zOldEd25519…",
+  "newRootDid": "did:key:zNewPostQuantum…",
+  "effectiveAt": 1717200000,
+  "graceUntil":  1719792000,
+  "newTopicId":  "<32-byte hex>",
+  "newManifestRef": "<hash or pointer to new manifest>",
+  "signature": "<ed25519 signature by old root over the above>"
+}
+```
+
+This block goes in the workspace's data Hypercore log, signed by the old
+root one last time. After publishing, the old root keypair can be destroyed.
+
+**Bootstrap flow under successor:**
+
+An old URL (`workspace://v1/zOldEd25519…`) arrives at a recipient:
+
+1. App tries to discover peers on the old topic (derived from old pubkey)
+2. Finds a peer; fetches the manifest
+3. Sees the successor attestation in the log
+4. Verifies it against the old root
+5. Switches to the new identity: new topic, new manifest, new envelopes
+6. Continues bootstrap under `workspace://v2/zNewPostQuantum…`
+
+During the grace period (months, not minutes), both topics are active;
+old URLs still resolve via the successor chain; new URLs work directly.
+After grace expires, old topic dies; old URLs surface "this workspace
+migrated to [new URL]" if peers serving the redirect remain reachable,
+otherwise "not found."
+
+**Compute and bandwidth cost of a migration:**
+
+| Operation | Cost |
+|---|---|
+| Old root signs successor attestation | 1 ed25519 sign, microseconds |
+| New root signs new manifest | 1 ed25519 sign, microseconds |
+| Per member: receive successor attestation | ~250 bytes |
+| Per member: receive new envelopes re-issued under new key | ~1 KB each |
+| 100-member workspace migration | ~150 KB total bandwidth |
+| 100,000-member workspace migration | ~150 MB total bandwidth |
+
+Negligible at any realistic scale. The real migration cost isn't compute
+or bandwidth — it's the social/coordination cost of "everyone needs to
+update during the grace period." That's bounded but not eliminated.
+
+**Member count is not a migration cost axis.** ~100 bytes per DID for the
+re-issue plus a single writer to the data log — trivial at any org scale.
+The cost is the cryptographic primitive change itself, not the count of
+people affected.
+
+### Residual risk
+
+A peer who stays offline for the entire grace period and only comes online
+after the old topic has been abandoned will see "not found" for their old
+URLs. They'd need to re-bootstrap via a fresh share of the new URL from a
+peer who'd already migrated. Bounded but not zero.
+
+The successor-chain mechanism itself is well-trodden — analogous to how
+DNS handles key rotation, how DID methods handle key recovery, how
+software-publisher signing keys rotate. We're not inventing a primitive,
+just applying it to workspace identity.
+
+---
+
 ## Honest residual unknowns
 
 Things we don't know that no amount of design can resolve in advance:
