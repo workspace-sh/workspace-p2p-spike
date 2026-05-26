@@ -509,6 +509,7 @@ For high-privacy workspaces (sensitive investigations, regulated content), the w
 ## Cross-references
 
 - [`workspace-format.md`](./workspace-format.md) — the `.workspace` container these URIs address
+- [`discovery.md`](./discovery.md) — DNS TXT and `.well-known/workspace` mechanisms for resolving a domain to a `workspace://` URI
 - [`permissions-model.md`](./permissions-model.md) — the cryptographic protocol
 - [`threat-model.md`](./threat-model.md) — what the URI scheme protects and what it doesn't (leakage rules)
 - [`risks.md`](./risks.md) — failure modes and mitigations

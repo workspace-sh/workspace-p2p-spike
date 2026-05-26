@@ -132,9 +132,9 @@ workspace://v1/<workspace-pubkey>[/<path>][?<query>]
 ```
 
 For the full URI scheme spec — including path namespaces, sub-resource
-addressing (`/at/<locator>`), HMAC-keyed slugs for markdown,
-locator alphabets per file format, and the `K_url` key — see
-[`uri-scheme.md`](./uri-scheme.md).
+addressing, locator alphabets per file format (markdown sections,
+canvas nodes, table rows/columns/cells, video timestamps, etc.), and
+the parsing rules — see [`uri-scheme.md`](./uri-scheme.md).
 
 This is the **magnet-link analogue**. Tiny URL, leaks no sensitive
 metadata, embeddable in any text channel. The content lives in the
@@ -629,7 +629,9 @@ Implementation work that materially affects this format:
 
 - [`uri-scheme.md`](./uri-scheme.md) — the `workspace://` URI scheme
   in full (path namespaces, sub-resource addressing, locator alphabets,
-  HMAC-keyed slugs, `K_url`)
+  parsing rules)
+- [`discovery.md`](./discovery.md) — DNS TXT and `.well-known/workspace`
+  discovery for orgs with a domain
 - [`threat-model.md`](./threat-model.md) — the contract this format
   serves
 - [`permissions-model.md`](./permissions-model.md) — the

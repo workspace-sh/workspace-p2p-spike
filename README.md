@@ -152,23 +152,29 @@ npm-only. Bun does not compose cleanly with `react-native-macos`.
 The design lives in `docs/`:
 
 - **[`workspace-format.md`](./docs/workspace-format.md)** — `.workspace`
-  format spec, `workspace://` URI, on-disk shape, hidden schema
-  entries, the workspace policy file, portability semantics
+  format spec, on-disk shape, hidden schema entries, the workspace
+  policy file, portability semantics
+- **[`uri-scheme.md`](./docs/uri-scheme.md)** — the `workspace://` URI
+  scheme: shape, path namespaces, locator alphabets per file format,
+  parsing rules
+- **[`discovery.md`](./docs/discovery.md)** — DNS TXT and
+  `.well-known/workspace` mechanisms for orgs with a domain
 - **[`permissions-model.md`](./docs/permissions-model.md)** — UCAN +
   Hypercore + Autobase protocol design, two-carrier envelope delivery,
   revocation, scaling
 - **[`threat-model.md`](./docs/threat-model.md)** — what Workspace
   protects, what it explicitly does not, forward-only revocation,
   cooperative-client policy, audit-trail-as-capability-chain
-- **[`risks.md`](./docs/risks.md)** — seven failure modes assessed
-  honestly, positions taken, residual unknowns
+- **[`risks.md`](./docs/risks.md)** — failure modes assessed honestly,
+  positions taken, residual unknowns
 - **[`ucan-prior-research.md`](./docs/ucan-prior-research.md)** —
   UCAN library notes (library comparison, gotchas)
 
 Start with `workspace-format.md` if you want to understand what's
 being built. Then `threat-model.md` for the contract that bounds it,
-`permissions-model.md` for the cryptographic protocol underneath, and
-`risks.md` for an honest assessment of where this could fall down.
+`uri-scheme.md` for how things are addressed, `permissions-model.md`
+for the cryptographic protocol underneath, and `risks.md` for an
+honest assessment of where this could fall down.
 
 ---
 
