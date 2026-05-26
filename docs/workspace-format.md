@@ -575,10 +575,7 @@ Explicit so future contributors don't quietly pick defaults:
    this folder at `K1`" convention)? If so, where does the
    declaration live — in `manifest.json`, in a per-folder dotfile,
    both?
-5. **Workspace identity vs root identity.** Is `workspaceId` always
-   equal to the root DID, or a separate identifier issued at
-   workspace creation? Implications for multi-workspace orgs,
-   forking, and root key rotation.
+5. ~~**Workspace identity vs root identity.**~~ **Resolved**: 1 workspace = 1 root identity in v1. The workspace's root pubkey IS the workspaceId at the URI layer; no separate identifier. Orgs with multiple workspaces create multiple `.workspace` folders, each with its own root keypair. See [`uri-scheme.md`](./uri-scheme.md) for the URI-side framing of this decision.
 6. **Workspace versioning.** `manifest.json` carries a
    `formatVersion`. What changes warrant a version bump? Forward
    compatibility expectations for older readers encountering newer

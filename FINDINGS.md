@@ -2,11 +2,13 @@
 
 **Verdict: Go.**
 
-Hypercore is a viable P2P data layer for Workspace across Node, macOS, and (by extension) mobile.
+Hypercore is a viable P2P data layer for Workspace across Node, macOS,
+and (by extension) mobile. The permissions, addressing, and discovery
+layers on top are designed and partially implemented.
 
 ---
 
-## What Was Proven
+## What was proven
 
 ### Node runtime
 Hypercore + Hyperswarm run cleanly under Node 20+. Two runtimes on the same machine replicated a log in ~260ms via the real DHT. Corestore v7 requires a filesystem path (RocksDB-backed); `:memory:` is a test shim over a temp directory.
@@ -21,7 +23,53 @@ Bonus: Hypercore's append events crossed the NSTask boundary unprompted. The "ze
 
 ---
 
-## Architecture That Follows
+## What was built (implemented, in PR #22)
+
+### `@workspace/p2p-runtime` crypto additions
+
+- `wrap.ts` — X25519 ECDH sealed envelopes for symmetric key delivery
+- `attestation.ts` — root attestation sign/verify (ed25519)
+- `did.ts` extensions — `did:key:z6Mk…` encode + decode (bidirectional)
+
+### `@workspace/ucan-boundary`
+
+UCAN delegation boundary module — every ucanto call confined to one file so a future library swap stays a small change. Surface: `issueDelegation`, `validateDelegation` (with the `canIssue` override for `workspace://` URIs), `toBytes` / `fromBytes` for transport, `WHOLE_SECOND_FLOOR` named constant for the expiry gotcha.
+
+### `@workspace/portable-bootstrap`
+
+Bundle creation and consumption — composes wrap + ucan + attestation into the offline `.workspace` envelope flow. Two peers, one issues a sealed envelope to the other's DID, the recipient validates the attestation, unwraps the keys, and joins. End-to-end demonstrated.
+
+### Tests
+
+**65 tests green across the three packages**, typecheck clean.
+
+### DID identity
+
+`did:key:z6Mk…` derivation from Corestore's `primaryKey` is now **implemented** (`packages/p2p-runtime/src/did.ts`). The format matches what ucanto expects in delegation chains. One keypair, one identity, no translation layer.
+
+---
+
+## What was designed (specs locked, implementation pending)
+
+Seven design docs in `docs/`, all consistent and cross-referenced:
+
+| Doc | Role |
+|---|---|
+| `workspace-format.md` | `.workspace` on-disk format, policy.json, hidden fields |
+| `uri-scheme.md` | `workspace://` URI scheme, path namespaces, locator alphabets per format |
+| `discovery.md` | DNS TXT + `.well-known/workspace` for domain-based discovery |
+| `permissions-model.md` | UCAN + Hypercore protocol, two-carrier envelope delivery, revocation, scaling |
+| `threat-model.md` | What Workspace protects / doesn't, forward-only revocation, cooperative-client policy, audit-trail = capability-chain |
+| `risks.md` | Failure modes, mitigations, identity-fusion migration cost, successor-chain |
+| `ucan-prior-research.md` | UCAN library notes, gotchas, library comparison |
+
+Validated as workable; every cryptographic component is either in production today (Autobase, ucanto, Hypercore/Hyperswarm, sodium-universal) or has a well-trodden standards-based answer (MLS / RFC 9420 for enterprise scale). No research-grade cryptography required.
+
+The consumer-facing view of the permissions model lives in [`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md).
+
+---
+
+## Architecture that follows
 
 ```
 React Native JS
@@ -33,50 +81,42 @@ React Native JS
                                                               └── Corestore + Hyperswarm
 ```
 
-The JS surface (`P2PRuntime` interface) is identical across all platforms. Only the spawning mechanism changes per platform.
+Per-platform JS surface (`P2PRuntime` interface) is identical. Only the spawning mechanism changes per platform.
+
+On top of the runtime sits the permissions layer (wrap + UCAN + attestation + portable bootstrap), the URI addressing scheme (`workspace://`), and optional discovery (DNS TXT + `.well-known`).
 
 ---
 
-## What Was Designed (not yet implemented)
+## Open work (tracked on the project board)
 
-### Permissions model (`docs/permissions-model.md`)
+- **Live key delivery log** ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)) — the live-swarm carrier counterpart to bundled envelopes
+- **Topic-layer authentication** ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) — UCAN check at the noise handshake; the second revocation lever
+- **Autobase wrapper** ([#11](https://github.com/workspace-sh/workspace-p2p-spike/issues/11)) + **merge strategy** ([#12](https://github.com/workspace-sh/workspace-p2p-spike/issues/12)) — multi-writer document API
+- **Identity recovery / device linking** ([#17](https://github.com/workspace-sh/workspace-p2p-spike/issues/17))
+- **MLS upgrade-path placeholder** ([#18](https://github.com/workspace-sh/workspace-p2p-spike/issues/18))
+- **UCAN library choice ADR** ([#19](https://github.com/workspace-sh/workspace-p2p-spike/issues/19))
+- **`.workspace` folder + archive shape** ([#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24))
+- **DNS discovery design** ([#25](https://github.com/workspace-sh/workspace-p2p-spike/issues/25)) — doc done; implementation pending
+- **Mobile path** ([#6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6)) — separate workstream
 
-A full design for tiered access control on Hypercore logs using UCAN
-delegation, symmetric encryption per tier, Autobase for multi-writer
-collaboration, and a key delivery channel that itself rides on
-Hypercore. Includes a worked example (54-person org), revocation
-levers (encryption layer + topic layer), and a scaling story (simple
-model to ~500 peers, MLS as the upgrade path beyond 10k).
-
-Validated as workable; every component is either in production today
-(Autobase, ucanto) or has a well-trodden standards-based answer
-(MLS / RFC 9420). No research-grade cryptography required.
-
-The consumer-facing view of the same model lives in
-[`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md).
-
-### DID identity
-
-`did:key:z6Mk…` derivation from Corestore's `primaryKey` is now
-**implemented** (`packages/p2p-runtime/src/did.ts`). The format matches
-what ucanto expects in delegation chains. One keypair, one identity,
-no translation layer.
+Project board: https://github.com/orgs/workspace-sh/projects/6
 
 ---
 
-## Open Questions (not blockers)
+## Open questions (not blockers)
 
-- **Mobile** — react-native-bare-kit is the likely path for iOS/Android. Not spiked; treat as a separate workstream. ([#6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6))
 - **Node binary on macOS** — development uses the system `node`; a production RN-macOS app needs a bundled static binary or an assumption that Node is present. Either is tractable.
 - **Corestore persistence** — `:memory:` is a temp directory under the hood. Production storage path needs to be wired to the app's sandbox container.
-- **Permissions implementation** — design is complete; implementation is the next major piece. Key pieces: UCAN delegation via ucanto, Autobase for multi-writer, key delivery Hypercore log, Hyperswarm topic-layer authentication. ([#5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5))
 
 ---
 
-## Extraction Checklist (main monorepo)
+## Extraction checklist (main monorepo)
 
 1. Copy `packages/p2p-runtime` → Workspace monorepo as `@workspace/p2p-runtime`.
-2. Add `apps/macos/native/P2PRuntimeModule.h` + `.mm` to the macOS Xcode target.
-3. Wire `runtime.macos.ts` export in the package — Metro resolves `.macos.ts` automatically.
-4. Set `childScriptPath` + `nodeBin` in the macOS app bootstrap.
-5. The mobile path is a separate spike — `react-native-bare-kit` replaces the NSTask path on iOS/Android.
+2. Copy `packages/ucan-boundary` → `@workspace/ucan-boundary`.
+3. Copy `packages/portable-bootstrap` → `@workspace/portable-bootstrap`.
+4. Add `apps/macos/native/P2PRuntimeModule.h` + `.mm` to the macOS Xcode target.
+5. Wire `runtime.macos.ts` export in the package — Metro resolves `.macos.ts` automatically.
+6. Set `childScriptPath` + `nodeBin` in the macOS app bootstrap.
+7. The mobile path is a separate spike — `react-native-bare-kit` replaces the NSTask path on iOS/Android.
+8. Lift the seven design docs into the main monorepo (or keep them in the spike repo with cross-references).
