@@ -65,6 +65,7 @@ full format spec.
 | Autobase wrapper ([#11](https://github.com/workspace-sh/workspace-p2p-spike/issues/11)) | pending |
 | `.workspace` folder + archive shape ([#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24)) | designed; implementation pending |
 | DNS / `.well-known` discovery ([#25](https://github.com/workspace-sh/workspace-p2p-spike/issues/25)) | designed; implementation pending |
+| Lighthouse — trusted always-on node | concept; post-spike, separate repo |
 | Mobile path ([#6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6)) | separate workstream |
 
 Permissions epic: [#5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5).
@@ -162,6 +163,8 @@ The design lives in `docs/`:
   parsing rules
 - **[`discovery.md`](./docs/discovery.md)** — DNS TXT and
   `.well-known/workspace` mechanisms for orgs with a domain
+- **[`lighthouse.md`](./docs/lighthouse.md)** — the Lighthouse concept:
+  trusted always-on nodes a workspace opts into for availability
 - **[`permissions-model.md`](./docs/permissions-model.md)** — UCAN +
   Hypercore + Autobase protocol design, two-carrier envelope delivery,
   revocation, scaling
