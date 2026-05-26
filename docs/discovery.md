@@ -1,24 +1,44 @@
 # Discovery
 
-How a user goes from "I want to join my org's workspace" to a
-`workspace://` URI they can open. Two mechanisms, both designed for
-orgs with their own domain. Both optional — workspaces work without
-either; this is convenience, not requirement.
+You've heard about a workspace your team uses. You know your company's
+domain — `acme.com`. You'd like to open the workspace by typing the
+domain in the Workspace app, the way you might open a link.
 
-**Status:** design. Out of band from `permissions-model.md` — discovery
-is about finding workspaces, not enforcing access.
+This document describes how that works. The Workspace app supports two
+ways for organisations to publish a workspace against their own domain,
+so anyone with the Workspace app can find a workspace just by knowing
+the domain. Both are entirely optional. Workspaces work fine without
+either — you can always share a workspace by handing someone a URL
+or a `.workspace` folder directly. Discovery is a convenience for
+organisations that already have a domain and want low-friction
+first-contact for their team.
+
+To be clear about scope: discovery is about *finding* a workspace,
+not *getting in*. Once an app has found the workspace, whether you
+can read what's inside is decided by the permission model, which
+operates entirely separately. See
+[`permissions-model.md`](./permissions-model.md) for that side of
+the story.
+
+**Status:** design — implementation pending. Tracked in
+[issue #25](https://github.com/workspace-sh/workspace-p2p-spike/issues/25).
 
 ---
 
-## Motivation
+## Why bother
 
 By default, joining a workspace requires someone to share the URI or
-the `.workspace` folder. That's fine for small groups but high-friction
-for an org with a domain name — every employee shouldn't need an admin
-to send them a link to find the company workspace.
+the `.workspace` folder. That works fine for small groups — a Slack
+message with a link, an AirDrop in the office — but gets awkward at
+organisational scale. A new employee shouldn't need to chase an admin
+for a link before they can find the company's workspace.
 
-Discovery closes that gap for orgs that own a DNS domain: type
-`acme.com`, the app resolves to the workspace's canonical URI.
+Discovery closes that gap: if an organisation publishes a small DNS
+record (or a JSON document at a well-known URL on their website),
+anyone with the Workspace app can find the workspace by typing
+`acme.com` — the same way you'd type a URL into a browser. The app
+resolves the domain to the workspace's canonical URI and proceeds with
+the normal join flow.
 
 ---
 

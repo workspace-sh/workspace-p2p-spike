@@ -1,12 +1,29 @@
 # workspace:// URI Scheme — v1
 
-The URI scheme for addressing a workspace, a document within it, or a
-sub-resource within a document. The URL form of a `.workspace`.
+`workspace://` is to a workspace what `https://` is to a website: the
+URL you'd send to someone so they can open it. Behind it sits a
+collection of files held in a `.workspace` folder; in front of it
+sits the same shape you already know — scheme, path, optional query
+and fragment.
 
-See [`workspace-format.md`](./workspace-format.md) for the on-disk
-container format that these URIs address. The URI scheme and the
-container format are designed together — the URI carries enough to
-bootstrap a workspace from any peer; the container holds the bytes.
+URLs let you link to the workspace as a whole, to a specific document
+inside it, or to a specific place within that document (a section, a
+row in a table, a node on a canvas, a moment in a video). They're
+designed to be short enough to embed in chat messages and QR codes,
+opaque enough not to leak sensitive content in browser history or
+link previews, and stable enough to survive edits to the documents
+they point at.
+
+This document is the technical spec: what the URL looks like, what
+its parts mean, how each file format defines its own "where in the
+document" alphabet, and how the app resolves a URL into an open
+document.
+
+For the on-disk shape these URLs address, see
+[`workspace-format.md`](./workspace-format.md). The URI scheme and
+the container format are designed together — the URL carries enough
+to bootstrap a workspace from any peer; the container holds the
+bytes.
 
 ---
 

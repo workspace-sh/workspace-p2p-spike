@@ -1,24 +1,29 @@
 # .workspace — File Format (v0, Early Spec)
 
+A `.workspace` is a folder on disk — or an archive of one — that
+holds everything a team needs to collaborate: documents, the rules
+about who can read what, the keys that enforce those rules, and the
+connection details for syncing with other members. From a user's
+perspective, the folder *is* the workspace. You can drag it to a USB
+stick, AirDrop it, drop it on a NAS, share it however you'd share any
+folder.
+
+This document describes what lives inside that folder, how it's
+arranged, and how the on-disk shape supports both the in-app
+collaboration experience and the portability that lets you take your
+data anywhere.
+
+The contained files keep their own format identity (`.md`, `.canvas`,
+`.table/`, anything else) and can be opened by any tool that
+understands them — when viewed outside a workspace they are just
+files. Inside a workspace, they gain field-level permission
+enforcement, because the workspace is the primitive container for
+that enforcement. **The file format stays clean; the container does
+the work.**
+
 **Status:** early. Shape expected to change as implementation
 proceeds. This document captures the current direction so format and
 app decisions made today don't paint us into a corner.
-
----
-
-## One-paragraph summary
-
-A `.workspace` is a folder — or an archive of one — that contains a
-collection of files plus the metadata needed to sync them and enforce
-access control between peers. The folder *is* the workspace. Sharing
-is a file-system operation: copy it to a USB stick, AirDrop it, drop
-it in a shared folder, link to it by URL. The contained files keep
-their own format identity (`.md`, `.canvas`, `.table/`, anything
-else) and can be opened by any tool that understands them — when
-viewed outside a workspace they are just files. Inside a workspace,
-they gain field-level permission enforcement, because the workspace
-is the primitive container for that enforcement. The file format
-stays clean; the container does the work.
 
 ---
 
