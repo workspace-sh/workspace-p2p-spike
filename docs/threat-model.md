@@ -358,6 +358,8 @@ design property.
   the schema for the `.workspace/policy.json` file
 - [`risks.md`](./risks.md) — where this could fail and what we're
   doing about it
+- [`lighthouse.md`](./lighthouse.md) — what trusting a Lighthouse
+  does and doesn't expose (it holds bytes, not access)
 - [`ucan-prior-research.md`](./ucan-prior-research.md) — UCAN-side
   research notes; the `canIssue` and revocation gotchas matter for the
   delegation-chain audit trail

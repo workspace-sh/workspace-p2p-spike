@@ -272,3 +272,5 @@ The implementation work is small:
 - [`threat-model.md`](./threat-model.md) — what Workspace's security
   guarantees do and don't cover, including the "fraudulent identity
   claim" risk relevant to DNS spoofing
+- [`lighthouse.md`](./lighthouse.md) — what an org's recommended
+  cold-start peer actually is once discovery resolves

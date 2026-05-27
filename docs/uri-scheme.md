@@ -195,7 +195,7 @@ The locator is the opaque section ID. Resolution: app queries the workspace Hype
 
 The markdown file itself stays standard — no annotations, no frontmatter section block, no inline anchors. Section IDs live entirely in workspace state.
 
-External edits handled by **match-by-current-text**: when a markdown file is edited outside Workspace, the file watcher reads the new content, matches each heading text to the workspace's section index, preserves IDs where text matches, generates new IDs for new headings, marks stale entries for deleted/renamed headings. Stale IDs in URLs soft-fail to document root.
+External edits handled by **match-by-current-text**: heading text matches to the workspace's section index preserve IDs across edits, even when headings are reordered or reworded. Stale IDs in URLs soft-fail to document root. See [`workspace-format.md`](./workspace-format.md) for the full external-edits flow.
 
 ### JSON Canvas
 

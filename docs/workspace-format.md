@@ -310,9 +310,9 @@ specific role.
 ```json
 {
   "formatVersion": 1,
-  "workspaceId": "wid-abc123",
+  "workspaceId": "z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc",
   "createdAt": 1717200000,
-  "rootDid": "did:key:z6Mk…",
+  "rootDid": "did:key:z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc",
   "topicId": "ab83…",
   "logs": {
     "data": "hex-encoded-hypercore-key",
@@ -321,9 +321,12 @@ specific role.
 }
 ```
 
-The workspace's stable identity. Workspace ID, creation time, root
-DID, the Hyperswarm topic, and the Hypercore log addresses that
-carry data and key delivery. Read at bootstrap by any peer.
+The workspace's stable identity. `workspaceId` is the multibase
+encoding of the root pubkey — the same bytes carried inside
+`rootDid`'s `did:key:` form (see resolved open question below).
+Bootstrap fields: creation time, root DID, Hyperswarm topic, and
+the Hypercore log addresses that carry data and key delivery. Read
+at bootstrap by any peer.
 
 ### `attestation.json`
 
@@ -339,7 +342,7 @@ Format mirrors the `SignedAttestation` struct in
 
 ```json
 {
-  "payload": { "workspaceId": "wid-abc123", "createdAt": 1717200000, "formatVersion": 1 },
+  "payload": { "workspaceId": "z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc", "createdAt": 1717200000, "formatVersion": 1 },
   "payloadBytes": "<base64>",
   "signature": "<base64>",
   "rootDid": "did:key:z…"
@@ -436,7 +439,7 @@ recipient, named by an encoding of their DID (e.g.
 ```json
 {
   "recipient": "did:key:z6Mk…",
-  "resource": "workspace://wid-abc123",
+  "resource": "workspace://v1/z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc",
   "ucan": "<base64-encoded delegation>",
   "wrappedKeys": {
     "K0_org": "<base64>",
@@ -764,6 +767,8 @@ Implementation work that materially affects this format:
 - [`uri-scheme.md`](./uri-scheme.md) — the `workspace://` URI scheme
   in full (path namespaces, sub-resource addressing, locator alphabets,
   parsing rules)
+- [`lighthouse.md`](./lighthouse.md) — trusted always-on node
+  concept; replicates this format from a known reachable address
 - [`discovery.md`](./discovery.md) — DNS TXT and `.well-known/workspace`
   discovery for orgs with a domain
 - [`threat-model.md`](./threat-model.md) — the contract this format

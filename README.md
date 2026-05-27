@@ -104,7 +104,10 @@ workspace was distributed.
 ├── README.md                            ← you are here
 ├── FINDINGS.md                          ← spike outcomes + extraction checklist
 ├── docs/
-│   ├── workspace-format.md              ← .workspace format spec + workspace:// URI
+│   ├── workspace-format.md              ← .workspace on-disk format spec
+│   ├── uri-scheme.md                    ← workspace:// URI scheme
+│   ├── discovery.md                     ← DNS TXT + .well-known/workspace
+│   ├── lighthouse.md                    ← trusted always-on node concept
 │   ├── permissions-model.md             ← UCAN + Hypercore protocol design
 │   ├── threat-model.md                  ← what Workspace protects (and doesn't)
 │   ├── risks.md                         ← where this could fail and what we're doing
@@ -120,7 +123,9 @@ workspace was distributed.
 │   ├── ucan-boundary/                   ← @workspace/ucan-boundary
 │   │   └── src/index.ts                 ← every ucanto call lives here
 │   └── portable-bootstrap/              ← @workspace/portable-bootstrap
-│       └── src/index.ts                 ← createBundle / consumeBundle
+│       └── src/
+│           ├── index.ts                 ← createBundle / consumeBundle
+│           └── folder.ts                ← writeBundleFolder / readBundleFolder
 └── apps/
     ├── node/                            ← smoke harness over real Hyperswarm
     ├── macos/native/                    ← P2PRuntimeModule (Obj-C++ TurboModule)

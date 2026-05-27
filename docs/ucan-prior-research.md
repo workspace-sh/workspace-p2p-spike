@@ -1,14 +1,14 @@
-# UCAN + Hypercore prior research (April 2026)
+# UCAN + Hypercore Prior Research (April 2026)
 
 Notes from a parallel UCAN+Hypercore exploration that ran before the current permissions-layer work. Preserved for context — the library comparison, the `canIssue` gotcha, the boundary-module pattern, and the 10-scenario test matrix continue to inform implementation choices in `@workspace/ucan-boundary`.
 
 The exploration built three in-process peer nodes, gave them ed25519 / did:key identities, used [@ucanto/core](https://www.npmjs.com/package/@ucanto/core) for capability minting + chain validation, and ran a 10-scenario integration test covering role grants, sub-delegation, revocation cascade, and expiry. **All 10 scenarios passed.**
 
-## headline
+## Headline
 
 UCAN + Hypercore can deliver offline-verifiable role-based permissions across peer nodes with no central authority. Sub-delegation and revocation work as expected. The gap between "spike works" and "production-ready" is mostly in the p2p substrate (Autobase for conflict resolution, on-device runtime), not in UCAN itself.
 
-## library choice — ucanto, not iso-ucan
+## Library choice — ucanto, not iso-ucan
 
 Three JS UCAN libraries worth considering:
 
@@ -19,7 +19,7 @@ Three JS UCAN libraries worth considering:
 
 For a real Workspace integration the choice is between **(a) ship faster on ucanto** and accept that wire-format interop with rs-ucan/go-ucan is one-way, or **(b) wait/build on iso-ucan** for ucan-wg v1.0 fidelity at the cost of building revocation yourself. The boundary module pattern (every ucanto call confined to one file) makes a future swap a 1–2 day job; the real cost is the capability-model rewrite (ucanto's `with`+`can` → ucan-wg's `sub`+`cmd`+`pol` policy predicates).
 
-## what surprised me
+## What surprised me
 
 1. **ucanto's authority termination assumed DID-as-resource.** Default `canIssue` checks `capability.with === issuer.did()` — Storacha's `store/add` etc. all use the service's own DID as the resource URI. Workspace-style URIs (`workspace://folderId/path/`) never satisfy this, so chains never terminate. Fix is one-line: pass a custom `canIssue` that says "the folder's root DID can self-issue any capability on this folder." Trivial once you read the validator source. **Not obvious from the README.**
 2. **Self-signed root delegations don't help.** First instinct (mint a `carl→carl` delegation as the chain root) is rejected by ucanto's `access()`. Use the `canIssue` override above instead.
@@ -27,7 +27,7 @@ For a real Workspace integration the choice is between **(a) ship faster on ucan
 4. **Revocation per-edge cascades for free.** Revoking Leslie's delegation kills every chain that passes through it — including the external reviewer she sub-delegated to. Cheap to implement: walk the chain CIDs, reject if any is in the local revocation set.
 5. **Ucanto expiry is whole seconds.** Sub-second TTLs `Math.floor` to zero. Use seconds.
 
-## production caveats — read before resuming
+## Production caveats — read before resuming
 
 1. **Per-peer feed + last-writer-wins projection.** The spike used one Hypercore feed per peer per folder, with each peer rebuilding its in-memory projection on every read. Concurrent writes to the same path are last-writer-wins. **Autobase is the right answer** for the eventual Workspace integration; budget a week to port.
 2. **Wire format is one-way.** ucanto cannot interop with rs-ucan/go-ucan. If Workspace ever needs to integrate a non-ucanto UCAN service, this becomes a real blocker.
@@ -36,7 +36,7 @@ For a real Workspace integration the choice is between **(a) ship faster on ucan
 5. **Storage growth.** Append-only feeds never shrink. Hypercore supports snapshots/truncation but using them in a multi-peer replicated context is non-trivial.
 6. **The ucan-wg v1.0 policy model matters long-term.** New `cmd`+`pol` model expresses constraints like "write file X only if size < N" — not possible in ucanto's `with`+`can`. If Workspace needs fine-grained caveats beyond resource+ability, iso-ucan becomes more attractive.
 
-## ecosystem notes
+## Ecosystem notes
 
 - The ucan-wg v1.0.0-rc.1 work is real and active. Spec + invocation actively edited in early 2026; delegation + revocation quiet since mid-2025 (likely settled, not abandoned).
 - Modular now: `spec` (envelope) + `delegation` + `invocation` + `revocation` + `promise` + `container` + `receipt`, each its own repo under `ucan-wg/`.
@@ -50,3 +50,13 @@ For a real Workspace integration the choice is between **(a) ship faster on ucan
 3. **Use Autobase, not per-peer feeds.** Skip the spike's last-writer-wins shortcut.
 4. **Implement the root attestation.** Don't ship trust-on-first-use.
 5. **Run the same 10 scenarios** as a regression suite.
+
+---
+
+## Cross-references
+
+- [`permissions-model.md`](./permissions-model.md) — the protocol
+  these notes informed; the `canIssue` and boundary-module patterns
+  ship there
+- [`threat-model.md`](./threat-model.md) — revocation cascade and
+  delegation-chain-as-audit-trail trace back to findings here

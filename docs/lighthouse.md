@@ -104,6 +104,11 @@ authoritative; they're all just peers with good uptime.
   resolved (separate from how its content gets replicated)
 - [`threat-model.md`](./threat-model.md) — what trusting a Lighthouse
   does and doesn't expose
+- [`uri-scheme.md`](./uri-scheme.md) — `workspace://` URIs can name
+  a Lighthouse as a cold-start hint via the `relays=` parameter
+- [`risks.md`](./risks.md) — Lighthouse mitigates the casual-user
+  relay dependency (risk #1) and the mobile-only availability gap
+  (risk #2)
 
 ---
 

@@ -80,7 +80,10 @@ goes down, their NAT-traversal path goes with it — they fall back to
 direct DHT, which often works for sufficiently-permissive networks
 but fails for the most restrictive ones (corporate guest wifi,
 carrier-grade NAT mobile data, etc.). Mitigation: clear UX showing
-relay state and easy override.
+relay state and easy override. Orgs that want a more capable always-
+on peer — one that holds workspace state, not just relays packets —
+run a Lighthouse (see [`lighthouse.md`](./lighthouse.md)). Relays
+and Lighthouses solve different problems and coexist.
 
 A motivated adversary running a malicious relay can observe metadata
 patterns (which DIDs talk to which, when, how much). The encrypted
@@ -110,8 +113,9 @@ from every SaaS competitor.
 
 Mobile is **online-mostly**, not always-on. Sync runs while the app
 is in foreground or recently-backgrounded. Desktop is the always-on
-peer that holds workspace state durably. Mobile-only users use a
-relay (their own or `workspace.sh`'s) as their stand-in for
+peer that holds workspace state durably. Mobile-only users point
+their workspace at a Lighthouse (see [`lighthouse.md`](./lighthouse.md))
+— their own, their org's, or a hosted one — as their stand-in for
 "always-on peer."
 
 We do not pretend mobile can be a primary always-on participant in
@@ -142,7 +146,8 @@ UX positioning:
   best with a desktop or always-on peer. Open the app on mobile to
   catch up."
 - Workspaces with only mobile peers nudge the user toward setting up
-  a relay (own or hosted).
+  a Lighthouse (own or hosted) — the always-on node that closes the
+  "no desktop in the swarm" gap.
 - Read-only and light-editing operations are mobile-first. Heavy edits
   (e.g. importing large tables) recommend desktop.
 
@@ -751,6 +756,8 @@ variable.
   these risks attach to
 - [`workspace-format.md`](./workspace-format.md) — the container
   format
+- [`lighthouse.md`](./lighthouse.md) — the always-on-node concept
+  that closes the mobile and casual-user availability gaps
 - [Issue #19](https://github.com/workspace-sh/workspace-p2p-spike/issues/19)
   — UCAN library choice ADR
 - [Issue #17](https://github.com/workspace-sh/workspace-p2p-spike/issues/17)

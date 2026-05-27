@@ -6,7 +6,7 @@ spike-side companion to
 which is the consumer-facing view. This document captures the
 underlying cryptographic and protocol choices.
 
-Status: **design + partial implementation**. The wrap primitive, UCAN
+**Status:** design + partial implementation. The wrap primitive, UCAN
 boundary module, root attestation primitive, and bootstrap envelope
 flow are implemented (`@workspace/p2p-runtime`, `@workspace/ucan-boundary`,
 `@workspace/portable-bootstrap`). The live key delivery log (#9),
@@ -130,18 +130,7 @@ Each delivery is one self-contained payload:
 
 ### Two carriers — bundled envelopes and the live key delivery log
 
-The delivery payload has the same shape regardless of how it travels.
-The shape:
-
-```
-{
-  ucan:        <signed delegation token>,
-  wrapped_key: <symmetric key, sealed to recipient's public key>,
-  resource:    <hypercore log address this key applies to>
-}
-```
-
-Two transports carry this payload, used in different situations:
+The same payload shape travels two ways, picked by context:
 
 #### Carrier 1 — Bundled envelopes (offline first-contact)
 
@@ -451,6 +440,8 @@ address is never shared with the wider org.
   entries, policy file)
 - [`risks.md`](./risks.md) — where this could fail and what we're
   doing about it
+- [`lighthouse.md`](./lighthouse.md) — the always-on-node concept;
+  participates in the same UCAN + replication layer as any other peer
 - [`FINDINGS.md`](../FINDINGS.md) — spike verdict + extraction checklist
 - [`docs/ucan-prior-research.md`](./ucan-prior-research.md) — UCAN
   library notes (ucanto `canIssue` gotcha, library comparison)
