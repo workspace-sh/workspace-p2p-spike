@@ -1,17 +1,17 @@
 // Filesystem pack/unpack for a portable bootstrap bundle.
 //
-// Writes a Bundle to the `_workspace/` subdirectory of a `.workspace/`
+// Writes a Bundle to the `.workspace/` subdirectory of a `.workspace/`
 // folder per the layout in docs/workspace-format.md:
 //
 //   <workspaceDir>/
-//   └── _workspace/
+//   └── .workspace/
 //       ├── manifest.json
 //       ├── attestation.json
 //       └── envelopes/
 //           └── <encoded-did>.json
 //
 // This is the **light bundle** form — manifest + attestation + envelopes only.
-// The encrypted store (_workspace/store/) and the working tree (user-facing
+// The encrypted store (.workspace/store/) and the working tree (user-facing
 // files like policies/, data/, ideas/) are written elsewhere as separate
 // concerns: see issue #9 (key delivery log) and the runtime layer for the
 // store; the working tree is the application's responsibility.
@@ -28,13 +28,13 @@ import {
   type SerialisedBundle,
 } from './index.ts';
 
-const META_DIR = '_workspace';
+const META_DIR = '.workspace';
 const MANIFEST_FILE = 'manifest.json';
 const ATTESTATION_FILE = 'attestation.json';
 const ENVELOPES_DIR = 'envelopes';
 
 /**
- * Write a bundle to the `_workspace/` subdirectory of `workspaceDir`.
+ * Write a bundle to the `.workspace/` subdirectory of `workspaceDir`.
  * Creates directories as needed. Does not write the encrypted store or
  * the user-facing working tree — those are separate concerns.
  *

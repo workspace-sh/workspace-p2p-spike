@@ -30,7 +30,7 @@ app decisions made today don't paint us into a corner.
 ## What a workspace looks like on disk
 
 ```
-my-org.workspace/                      ← the workspace itself
+my-org.workspace/                      ← outer bundle (extension, à la .app / .xcworkspace)
 ├── policies/
 │   ├── code-of-conduct.md             ← plaintext, anyone in the workspace can read
 │   └── parental-leave.md
@@ -42,7 +42,7 @@ my-org.workspace/                      ← the workspace itself
 │       ├── schema.json                ← public field declarations + hidden-field IDs
 │       ├── rows.ndjson                ← rows; only public fields appear here
 │       └── bodies/
-└── _workspace/                        ← container metadata + encrypted state
+└── .workspace/                        ← inner hidden metadata (dot-prefixed, à la .git)
     ├── manifest.json                  ← workspace identity, root DID, topic
     ├── attestation.json               ← root signature over the manifest
     ├── policy.json                    ← workspace's cleanup/rotation policy
@@ -51,14 +51,25 @@ my-org.workspace/                      ← the workspace itself
     └── store/                         ← encrypted Hypercore blocks
 ```
 
-Everything *above* `_workspace/` is the user-facing working tree:
+The name `workspace` does double duty by design:
+
+- **Outer** — `<name>.workspace/` uses `.workspace` as the file
+  extension. macOS Finder hides extensions, so lay users see "my-org"
+  and treat it as an ordinary folder. The whole folder *is* the
+  workspace — copy it, AirDrop it, drop it on a USB stick.
+- **Inner** — `.workspace/` is a dot-prefixed hidden directory inside
+  the bundle, holding machine-facing state. Hidden by default on
+  macOS/Linux the same way `.git/` is. Users see the working tree
+  (`policies/`, `data/`, …), not the machinery.
+
+Everything *above* `.workspace/` is the user-facing working tree:
 plaintext files arranged however the user wants. Everything *inside*
-`_workspace/` is machine-facing container state — the workspace's
+`.workspace/` is machine-facing container state — the workspace's
 identity, the encrypted log, the keys.
 
 This split mirrors git's working-tree / `.git` separation. You can
 edit `code-of-conduct.md` in any text editor; you cannot meaningfully
-edit anything inside `_workspace/` by hand.
+edit anything inside `.workspace/` by hand.
 
 ---
 
@@ -77,7 +88,7 @@ This is what makes the folder feel like ordinary files.
 
 Files and fields that require additional tier keys (`K1`, `K2`, `K_hr`,
 etc.) are **never** written to the working tree as plaintext. They
-exist only as encrypted bytes inside `_workspace/store/`. The
+exist only as encrypted bytes inside `.workspace/store/`. The
 Workspace app, for an authorised viewer, decrypts them into memory
 when the user opens them — and shows them in the UI — but does not
 materialise them to disk.
@@ -149,7 +160,7 @@ swarm; the URL is the entry ticket.
 
 | Shape | What it carries | When to use |
 |---|---|---|
-| **Heavy bundle** | Full folder including `_workspace/store/` (encrypted bytes) | Self-contained, offline-capable. USB sticks, AirDrop to a colleague who may not be online, archival snapshots. |
+| **Heavy bundle** | Full folder including `.workspace/store/` (encrypted bytes) | Self-contained, offline-capable. USB sticks, AirDrop to a colleague who may not be online, archival snapshots. |
 | **Light bundle** (`workspace://` URL or a `.workspace` folder with only manifest + attestation + envelopes) | ~a few KB; recipient's app fetches encrypted content from peers via Hyperswarm | URL-shareable. Embed in chat, QR code, web link. |
 
 Same recipient experience either way: app validates the attestation,
@@ -168,7 +179,7 @@ arrive with the bootstrap or are pulled from the swarm afterwards.
 
 ---
 
-## Container metadata in `_workspace/`
+## Container metadata in `.workspace/`
 
 The hidden subdirectory holds machine-facing state. Each file has a
 specific role.
@@ -445,7 +456,7 @@ key delivery log — more aggressive but possible.
 In two physical places that the app combines in memory:
 
 - `<table>/schema.json` — public entries + hidden-field IDs (markers)
-- `_workspace/store/` — encrypted hidden-schema-entry contents, keyed
+- `.workspace/store/` — encrypted hidden-schema-entry contents, keyed
   by the IDs
 
 The "full schema" exists only as an in-memory object on an authorised
@@ -456,7 +467,7 @@ viewer's machine.
 If a `.table/` is taken out of a workspace (moved, exported as a
 standalone file for use in a non-Workspace tool), it carries only
 its own `schema.json` and `rows.ndjson`. The encrypted blobs in
-`_workspace/store/` don't travel — they were workspace-container
+`.workspace/store/` don't travel — they were workspace-container
 state.
 
 On export, the format strips the `hiddenFields` array from the
@@ -473,16 +484,16 @@ has clear semantics.
 
 ### Default: copy the folder
 
-The user opens Finder (or equivalent), drags the `.workspace/`
-folder to a USB stick / AirDrop / NAS / email attachment / cloud
+The user opens Finder (or equivalent), drags the `<name>.workspace/`
+bundle to a USB stick / AirDrop / NAS / email attachment / cloud
 storage. No special export step, no Workspace app needed.
 
 What gets sent:
 
 - Workspace-public content in plaintext (intended — these are public
   anyway)
-- `_workspace/manifest.json`, `attestation.json`, `policy.json`
-- Tier-gated content as encrypted bytes in `_workspace/store/`
+- `.workspace/manifest.json`, `attestation.json`, `policy.json`
+- Tier-gated content as encrypted bytes in `.workspace/store/`
 - Bootstrap envelopes addressed to whoever was already invited
 
 What does **not** get sent:
@@ -505,7 +516,7 @@ does not need to think about what's leaking.
 A guided UX flow inside the Workspace app: "share this workspace
 with X." Before sending, the user adds a bootstrap envelope for X
 sealed to their DID, carrying whichever keys they should hold.
-After the envelope exists in `_workspace/envelopes/`, the folder is
+After the envelope exists in `.workspace/envelopes/`, the folder is
 shared via any of the default channels above. The recipient is
 "pre-onboarded" and can use the workspace immediately.
 
@@ -517,8 +528,8 @@ adds an envelope; everything else is regular file sharing.
 A separate UX flow: "export this `.table/` as a standalone file,"
 or "export the entire workspace as a plain folder." Decrypts
 everything the current user is authorised to read and writes it to a
-new folder *outside* the `.workspace/` container. No `_workspace/`
-metadata, no encrypted store, no envelopes — just the plaintext
+new folder *outside* the workspace bundle. No `.workspace/` metadata
+directory, no encrypted store, no envelopes — just the plaintext
 content.
 
 The result is a plain folder, suitable for use with non-Workspace
@@ -531,7 +542,7 @@ whatever the user does with it.
 
 | Operation | What it produces | UX |
 |---|---|---|
-| Copy folder | The `.workspace/` folder as-is | File system (default) |
+| Copy folder | The `<name>.workspace/` bundle as-is | File system (default) |
 | Share-with | Same + an envelope pre-addressed to recipient | In-app, one click |
 | Export plaintext | A plain folder, no permission model | In-app, explicit "leave the container" step |
 
@@ -586,7 +597,7 @@ Explicit so future contributors don't quietly pick defaults:
    compatibility expectations for older readers encountering newer
    workspaces?
 7. **Manifest content boundary.** What belongs in `manifest.json` vs
-   separate files in `_workspace/`? Tension between "single
+   separate files in `.workspace/`? Tension between "single
    authoritative file" and "separation of concerns."
 8. **Forks and copies.** If Alice forks a workspace and modifies it,
    what identifies the fork as related to the original? Trail in
@@ -614,7 +625,7 @@ Implementation work that materially affects this format:
 - **`@workspace/p2p-runtime/src/wrap.ts`** — produces the sealed
   bytes that go into `envelopes/` and into per-field encryption.
 - **`@workspace/p2p-runtime/src/attestation.ts`** — produces
-  `attestation.json` and the `_workspace/policy.json` signature.
+  `attestation.json` and the `.workspace/policy.json` signature.
 - **`@workspace/ucan-boundary`** — issues and validates the UCANs
   inside envelopes.
 - **`@workspace/portable-bootstrap`** — creates and consumes

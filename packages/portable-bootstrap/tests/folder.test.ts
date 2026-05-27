@@ -2,7 +2,7 @@
 //
 // Exercises writeBundleFolder → readBundleFolder round-trip and verifies the
 // on-disk layout matches docs/workspace-format.md (manifest.json,
-// attestation.json, envelopes/* all under `_workspace/`).
+// attestation.json, envelopes/* all under `.workspace/`).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -144,7 +144,7 @@ test('end-to-end from disk: a consumer can unwrap their key after reading from a
 // On-disk layout: matches docs/workspace-format.md
 // ---------------------------------------------------------------------------
 
-test('on-disk layout: _workspace/ holds manifest, attestation, and envelopes/ subdir', async () => {
+test('on-disk layout: .workspace/ holds manifest, attestation, and envelopes/ subdir', async () => {
   const rootKp = seededKey(50);
   const aliceKp = seededKey(51);
   const root = await principalFromSeed(rootKp.secretKey.subarray(0, 32));
@@ -164,19 +164,19 @@ test('on-disk layout: _workspace/ holds manifest, attestation, and envelopes/ su
   await withTempWorkspace('layout', async (dir) => {
     await writeBundleFolder(bundle, dir);
 
-    const meta = join(dir, '_workspace');
+    const meta = join(dir, '.workspace');
     const metaStat = await stat(meta);
-    assert.ok(metaStat.isDirectory(), '_workspace/ should be a directory');
+    assert.ok(metaStat.isDirectory(), '.workspace/ should be a directory');
 
     const manifestStat = await stat(join(meta, 'manifest.json'));
-    assert.ok(manifestStat.isFile(), '_workspace/manifest.json should exist');
+    assert.ok(manifestStat.isFile(), '.workspace/manifest.json should exist');
 
     const attestationStat = await stat(join(meta, 'attestation.json'));
-    assert.ok(attestationStat.isFile(), '_workspace/attestation.json should exist');
+    assert.ok(attestationStat.isFile(), '.workspace/attestation.json should exist');
 
     const envelopesDir = join(meta, 'envelopes');
     const envelopesStat = await stat(envelopesDir);
-    assert.ok(envelopesStat.isDirectory(), '_workspace/envelopes/ should be a directory');
+    assert.ok(envelopesStat.isDirectory(), '.workspace/envelopes/ should be a directory');
 
     // Envelope filename: DID with colons replaced by underscores.
     const envelopeFiles = await readdir(envelopesDir);

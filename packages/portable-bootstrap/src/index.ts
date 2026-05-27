@@ -113,7 +113,7 @@ const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 /**
  * Produce a bundle in memory. No disk I/O — caller is responsible for
- * serialising and writing to wherever (`_workspace/` directory, archive, etc.).
+ * serialising and writing to wherever (`.workspace/` directory, archive, etc.).
  */
 export async function createBundle(input: CreateBundleInput): Promise<Bundle> {
   const formatVersion = input.formatVersion ?? 1;
@@ -364,6 +364,6 @@ function base64ToBytes(b64: string): Uint8Array {
 export { principalFromSeed };
 export type { CapabilityDescriptor, DelegationToken, Principal } from '@workspace/ucan-boundary';
 
-// Filesystem pack/unpack — write a bundle to a `_workspace/` folder layout
+// Filesystem pack/unpack — write a bundle to a `.workspace/` folder layout
 // per docs/workspace-format.md and read it back.
 export { writeBundleFolder, readBundleFolder } from './folder.ts';

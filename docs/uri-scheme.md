@@ -341,7 +341,7 @@ When an app opens a `workspace://` URI:
    - `/document/<id>` — Hyperbee lookup on document ID → returns metadata (type, path, tier requirements)
    - `/document/<id>/<locator>` — open the document; resolve the locator via the document's format-specific mechanism (Hyperbee for markdown sections, in-file for canvas nodes, etc.). On miss: soft-fail to document root.
    - `/document/<id>/comment/<id>` — Hyperbee lookup on comment ID
-   - `/invite/<did>` — read the envelope file at `_workspace/envelopes/<encoded-did>.json`
+   - `/invite/<did>` — read the envelope file at `.workspace/envelopes/<encoded-did>.json`
    - `/user/<did>` — Hyperbee lookup on user DID
    - `/team/<id>` — Hyperbee lookup on team ID
 8. **Apply tier-key gating** — if the resolved resource is tier-gated and the user doesn't hold the required tier key, surface "you don't have access"
@@ -353,7 +353,7 @@ When an app opens a `workspace://` URI:
 
 | Identifier in URI | Where it resolves | Lookup |
 |---|---|---|
-| Workspace pubkey | `_workspace/manifest.json` (verified by attestation) | O(1), read once at bootstrap |
+| Workspace pubkey | `.workspace/manifest.json` (verified by attestation) | O(1), read once at bootstrap |
 | Document ID | Hyperbee index inside the workspace's data Hypercore store | O(log n), sparse-fetched |
 | Sub-resource locator (markdown sections, PDF sections) | Hyperbee index keyed by `(docId, sectionId)` inside the workspace's data Hypercore store | O(log n), sparse-fetched |
 | Sub-resource locator (canvas nodes, .table rows/columns) | inside the document file itself (format-native) | O(1) within the open document |
@@ -361,7 +361,7 @@ When an app opens a `workspace://` URI:
 | Comment ID | Hyperbee | O(log n) |
 | Team ID | Hyperbee | O(log n) |
 | User DID | Hyperbee | O(log n) |
-| Envelope (invite recipient DID) | `_workspace/envelopes/<encoded-did>.json` — one file per recipient | O(1) file read |
+| Envelope (invite recipient DID) | `.workspace/envelopes/<encoded-did>.json` — one file per recipient | O(1) file read |
 
 No giant index files at the workspace level. The Hypercore data log itself is structurally an event stream; Hyperbee sits on top as a B-tree projection for fast keyed lookups. Sparse-loadable — peers fetch only blocks they actually query. Cold-start cost is bounded (~4 KB) regardless of workspace size.
 
@@ -395,7 +395,7 @@ workspace://v1/z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc/invite/z6MkBobX5
 
 Bob (the recipient) sees this URL. His Workspace app:
 - Joins the workspace's swarm
-- Finds the envelope sealed to his DID in `_workspace/envelopes/`
+- Finds the envelope sealed to his DID in `.workspace/envelopes/`
 - Validates the UCAN inside, unwraps the symmetric keys, joins as a member
 
 Forwarding the URL to someone else is harmless — the envelope is sealed to Bob's pubkey; nobody else can unwrap it.

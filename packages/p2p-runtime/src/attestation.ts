@@ -78,7 +78,7 @@ export interface AttestationPayload {
   workspaceId: string;
   /** Workspace creation time, whole-seconds-since-epoch. */
   createdAt: number;
-  /** `_workspace/` format version this attestation was issued under. */
+  /** `.workspace/` format version this attestation was issued under. */
   formatVersion: number;
 }
 

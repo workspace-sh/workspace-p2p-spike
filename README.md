@@ -23,7 +23,7 @@ a NAS, attach it to an email.
 
 What's on disk is already safe to share — public files appear in
 plaintext, tier-gated content lives only as encrypted bytes inside
-`_workspace/`, and per-recipient bootstrap envelopes are sealed to
+`.workspace/`, and per-recipient bootstrap envelopes are sealed to
 their intended DIDs. Copy-paste sharing does not leak. No "export"
 step is needed for safety.
 

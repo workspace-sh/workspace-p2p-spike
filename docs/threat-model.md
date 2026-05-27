@@ -240,7 +240,7 @@ Some desirable behaviours on revocation (delete local files, clear
 caches, show the user a notification) cannot be cryptographically
 enforced — they depend on the client running the cleanup. Workspace
 addresses this with a **workspace policy file** signed by the root
-DID: `_workspace/policy.json` (see
+DID: `.workspace/policy.json` (see
 [`workspace-format.md`](./workspace-format.md) for the schema). The
 policy declares what cooperating apps *should* do on lifecycle events
 (revocation, key rotation, workspace deletion). A revocation notice
@@ -355,7 +355,7 @@ design property.
   format that triggers cooperative-client cleanup)
 - [`workspace-format.md`](./workspace-format.md) — the container shape
   that distributes the artefacts this contract protects, including
-  the schema for the `_workspace/policy.json` file
+  the schema for the `.workspace/policy.json` file
 - [`risks.md`](./risks.md) — where this could fail and what we're
   doing about it
 - [`ucan-prior-research.md`](./ucan-prior-research.md) — UCAN-side

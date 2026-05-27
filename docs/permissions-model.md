@@ -145,7 +145,7 @@ Two transports carry this payload, used in different situations:
 
 #### Carrier 1 — Bundled envelopes (offline first-contact)
 
-Inside the `.workspace` bundle itself: `_workspace/envelopes/` holds
+Inside the `.workspace` bundle itself: `.workspace/envelopes/` holds
 one envelope per intended recipient, sealed to their DID. When the
 bundle is delivered offline (USB stick, AirDrop, email attachment,
 even just dragged into a shared folder), the recipient's app finds
@@ -306,7 +306,7 @@ to the key delivery log:
 Signed by the issuer (an admin with revoke capability over the
 subject's chain). Replicated to all peers. The subject's app sees
 the block on next sync, reads the workspace's
-[`_workspace/policy.json`](./workspace-format.md), and runs whatever
+[`.workspace/policy.json`](./workspace-format.md), and runs whatever
 cleanup the policy declares.
 
 This is **cooperative-client behaviour** — a hint to well-behaved
