@@ -60,6 +60,12 @@ This split mirrors git's working-tree / `.git` separation. You can
 edit `code-of-conduct.md` in any text editor; you cannot meaningfully
 edit anything inside `.workspace/` by hand.
 
+On macOS and Linux the dot-prefix is enough to hide `.workspace/`
+from default file-browser views. On Windows, where the Unix
+dot-prefix convention isn't honoured, the writer sets
+`FILE_ATTRIBUTE_HIDDEN` on the directory at creation time so
+Explorer hides it for non-technical users.
+
 ---
 
 ## On-disk reality: what's plaintext, what's encrypted

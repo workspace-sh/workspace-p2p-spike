@@ -50,6 +50,11 @@ export async function writeBundleFolder(
   const envelopesDir = join(metaDir, ENVELOPES_DIR);
   await mkdir(envelopesDir, { recursive: true });
 
+  // TODO(windows): dot-prefix is not honoured by Windows Explorer. When this
+  // code runs on win32, set FILE_ATTRIBUTE_HIDDEN on metaDir via the Win32
+  // API (or `attrib +h`) so the directory is hidden from non-technical users.
+  // macOS / Linux honour the dot-prefix natively — no action needed there.
+
   const s = serialiseBundle(bundle);
 
   await writeFile(
