@@ -125,12 +125,21 @@ product where avoiding leaks matters more than terminal convenience.
 
 ## External edits — watching the working tree
 
-A Workspace folder is meant to behave like Dropbox: open files in
+A Workspace folder is meant to behave like Dropbox: open a file in
 whichever editor you like, save, and Workspace picks up the change.
 The app watches the working tree (everything above `.workspace/`)
 and reconciles edits into the workspace's logs as they happen. This
 is what makes the "the folder *is* the workspace" promise honest —
 your existing tools still work.
+
+That said, Workspace ships its own editors for the formats it
+handles natively — markdown, canvas, `.table`. Editing inside the
+app gets you presence, comments, permission-aware field rendering,
+locator-stable links, and conflict-free collaborative edits.
+For the formats Workspace handles natively, the in-app editor is
+where you'll want to be — external editing is the safety net that
+keeps the folder from being held hostage by the app, not the
+primary path.
 
 ### What's watched
 
@@ -144,12 +153,14 @@ your existing tools still work.
 
 ### How
 
-The same way Dropbox, Obsidian, and VS Code do it: a single cross-
-platform watcher (chokidar is the obvious choice — wraps FSEvents
-on macOS, inotify on Linux, ReadDirectoryChangesW on Windows). The
-watcher emits add / change / unlink events; Workspace debounces a
-short window (typically 100–300ms) to coalesce the multi-event
-bursts editors produce.
+The working tree is watched via the platform's native change-
+notification API — FSEvents on macOS, inotify on Linux,
+ReadDirectoryChangesW on Windows. Node implementations typically
+use chokidar to wrap all three behind one interface; any equivalent
+works. Workspace debounces incoming events within a short window
+(100–300ms) so a single user-level save lands as a single ingest,
+even when the underlying editor emits a flurry of filesystem
+events (see "Atomic-save patterns" below).
 
 ### Atomic-save patterns
 
