@@ -442,6 +442,8 @@ address is never shared with the wider org.
   doing about it
 - [`lighthouse.md`](./lighthouse.md) — the always-on-node concept;
   participates in the same UCAN + replication layer as any other peer
+- [`discovery-layers.md`](./discovery-layers.md) — how peers find
+  each other (local / LAN / WAN) before this protocol takes over
 - [`FINDINGS.md`](../FINDINGS.md) — spike verdict + extraction checklist
 - [`docs/ucan-prior-research.md`](./ucan-prior-research.md) — UCAN
   library notes (ucanto `canIssue` gotcha, library comparison)

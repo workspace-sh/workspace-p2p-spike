@@ -51,13 +51,14 @@ Bundle creation and consumption — composes wrap + ucan + attestation into the 
 
 ## What was designed (specs locked, implementation pending)
 
-Eight design docs in `docs/`, all consistent and cross-referenced:
+Nine design docs in `docs/`, all consistent and cross-referenced:
 
 | Doc | Role |
 |---|---|
 | `workspace-format.md` | `.workspace` on-disk format, policy.json, hidden fields, external-edits watcher |
 | `uri-scheme.md` | `workspace://` URI scheme, path namespaces, locator alphabets per format |
 | `discovery.md` | DNS TXT + `.well-known/workspace` for domain-based discovery |
+| `discovery-layers.md` | Local-first / LAN / WAN peer-discovery hierarchy |
 | `lighthouse.md` | Trusted always-on node a workspace opts into for availability |
 | `permissions-model.md` | UCAN + Hypercore protocol, two-carrier envelope delivery, revocation, scaling |
 | `threat-model.md` | What Workspace protects / doesn't, forward-only revocation, cooperative-client policy, audit-trail = capability-chain |
@@ -98,6 +99,8 @@ On top of the runtime sits the permissions layer (wrap + UCAN + attestation + po
 - **UCAN library choice ADR** ([#19](https://github.com/workspace-sh/workspace-p2p-spike/issues/19))
 - **`.workspace` folder + archive shape** ([#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24))
 - **DNS discovery design** ([#25](https://github.com/workspace-sh/workspace-p2p-spike/issues/25)) — doc done; implementation pending
+- **LAN discovery via mDNS** — designed in [`docs/discovery-layers.md`](./docs/discovery-layers.md); implementation deferred (~200 lines on top of Holepunch's `multicast-dns`)
+- **PAN discovery (Bluetooth / Wi-Fi Direct / AWDL)** — backlogged; revisit when mobile is in scope
 - **Mobile path** ([#6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6)) — separate workstream
 
 Project board: https://github.com/orgs/workspace-sh/projects/6
@@ -120,4 +123,4 @@ Project board: https://github.com/orgs/workspace-sh/projects/6
 5. Wire `runtime.macos.ts` export in the package — Metro resolves `.macos.ts` automatically.
 6. Set `childScriptPath` + `nodeBin` in the macOS app bootstrap.
 7. The mobile path is a separate spike — `react-native-bare-kit` replaces the NSTask path on iOS/Android.
-8. Lift the eight design docs into the main monorepo (or keep them in the spike repo with cross-references).
+8. Lift the nine design docs into the main monorepo (or keep them in the spike repo with cross-references).

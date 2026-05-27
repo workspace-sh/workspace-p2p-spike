@@ -69,4 +69,18 @@ export interface CreateRuntimeOptions {
    * - On web: ignored (the web runtime is a stub today).
    */
   storage?: string;
+
+  /**
+   * DHT bootstrap nodes for Hyperswarm. When set, the runtime uses these
+   * instead of the public Hyperswarm DHT — useful for tests, self-hosted
+   * orgs running a private DHT, or simulated multi-peer environments that
+   * shouldn't emit traffic to the public internet.
+   *
+   * Each entry is `{ host, port }`. Pass at least one; the DHT will use
+   * the others as backups.
+   *
+   * See `docs/discovery-layers.md` for the broader local-first /
+   * LAN / WAN discovery story this fits into.
+   */
+  bootstrap?: Array<{ host: string; port: number }>;
 }

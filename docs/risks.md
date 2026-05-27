@@ -83,7 +83,11 @@ carrier-grade NAT mobile data, etc.). Mitigation: clear UX showing
 relay state and easy override. Orgs that want a more capable always-
 on peer — one that holds workspace state, not just relays packets —
 run a Lighthouse (see [`lighthouse.md`](./lighthouse.md)). Relays
-and Lighthouses solve different problems and coexist.
+and Lighthouses solve different problems and coexist. For peers on
+the same LAN, neither is the right tool: a future LAN-discovery
+layer (mDNS-based, ~200 lines built on Holepunch's `multicast-dns`)
+removes the public-DHT dependency entirely for co-located peers. See
+[`discovery-layers.md`](./discovery-layers.md).
 
 A motivated adversary running a malicious relay can observe metadata
 patterns (which DIDs talk to which, when, how much). The encrypted
@@ -745,6 +749,28 @@ Things we don't know that no amount of design can resolve in advance:
 
 The design is right. Execution risk is the dominant remaining
 variable.
+
+---
+
+## Future-work backlog
+
+Captured here to avoid losing the thread:
+
+- **LAN discovery (mDNS).** Layer 2 of the
+  [discovery-layers](./discovery-layers.md) story. Implementation
+  pending; prior art exists in Holepunch's `multicast-dns` module
+  (mafintosh-authored) and the dat-ecosystem's `dns-discovery`.
+  ~200 lines of new code. Removes the public-DHT dependency for
+  co-located peers.
+- **PAN discovery (Bluetooth / Wi-Fi Direct / AWDL).** Layer below
+  LAN, for peers with no shared network at all (just physical
+  proximity). Significant per-platform engineering; AWDL is private
+  API on Apple platforms, Wi-Fi Direct is constrained on iOS.
+  Deferred until mobile is in scope.
+- **Opportunistic mDNS in production.** Once the LAN layer exists,
+  clients can use it alongside the public DHT — connect directly to
+  co-located peers, fall through to the DHT for the rest. Reduces
+  DHT load and improves UX in offices, cafés, homes.
 
 ---
 

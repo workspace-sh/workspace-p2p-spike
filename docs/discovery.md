@@ -274,3 +274,6 @@ The implementation work is small:
   claim" risk relevant to DNS spoofing
 - [`lighthouse.md`](./lighthouse.md) — what an org's recommended
   cold-start peer actually is once discovery resolves
+- [`discovery-layers.md`](./discovery-layers.md) — *peer*-to-peer
+  discovery (local / LAN / WAN), distinct from the *domain*-to-URI
+  resolution this doc covers

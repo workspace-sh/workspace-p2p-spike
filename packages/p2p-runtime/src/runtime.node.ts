@@ -93,6 +93,7 @@ export class NodeRuntime implements P2PRuntime {
   private logs = new Map<string, NodeLog>();
   private didCache: Did | null = null;
   private opened = false;
+  private bootstrap: Array<{ host: string; port: number }> | undefined;
 
   constructor(opts: CreateRuntimeOptions = {}) {
     const s = opts.storage;
@@ -102,13 +103,18 @@ export class NodeRuntime implements P2PRuntime {
       if (!existsSync(s)) mkdirSync(s, { recursive: true });
       this.storagePath = s;
     }
+    this.bootstrap = opts.bootstrap;
   }
 
   async ready(): Promise<void> {
     if (this.opened) return;
     this.store = new Corestore(this.storagePath);
     await this.store.ready();
-    this.swarm = new Hyperswarm();
+    // If bootstrap nodes are configured, Hyperswarm uses them instead of the
+    // public DHT — see CreateRuntimeOptions.bootstrap.
+    this.swarm = this.bootstrap
+      ? new Hyperswarm({ bootstrap: this.bootstrap })
+      : new Hyperswarm();
     this.swarm.on('connection', (conn: unknown) => {
       // Every incoming connection is paired with a corestore replication stream.
       // corestore knows which cores the peer wants and responds to gets.
