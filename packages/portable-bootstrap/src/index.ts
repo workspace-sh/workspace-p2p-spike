@@ -363,3 +363,7 @@ function base64ToBytes(b64: string): Uint8Array {
 // @workspace/ucan-boundary directly when starting a bundle workflow.
 export { principalFromSeed };
 export type { CapabilityDescriptor, DelegationToken, Principal } from '@workspace/ucan-boundary';
+
+// Filesystem pack/unpack — write a bundle to a `_workspace/` folder layout
+// per docs/workspace-format.md and read it back.
+export { writeBundleFolder, readBundleFolder } from './folder.ts';
