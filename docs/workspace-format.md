@@ -123,6 +123,121 @@ product where avoiding leaks matters more than terminal convenience.
 
 ---
 
+## External edits — watching the working tree
+
+A Workspace folder is meant to behave like Dropbox: open files in
+whichever editor you like, save, and Workspace picks up the change.
+The app watches the working tree (everything above `.workspace/`)
+and reconciles edits into the workspace's logs as they happen. This
+is what makes the "the folder *is* the workspace" promise honest —
+your existing tools still work.
+
+### What's watched
+
+- Everything above `.workspace/`: markdown, canvas files, table
+  folders, plus any user-added files Workspace recognises.
+- Excluded: `.workspace/` itself (machine-facing — only the app
+  touches it), OS junk (`.DS_Store`, `Thumbs.db`, `desktop.ini`),
+  editor sidecar files (`*.swp`, `*~`, `.~lock.*`).
+- Unknown file types are recorded as opaque blobs and sync to peers
+  byte-for-byte. They get no field-level treatment.
+
+### How
+
+The same way Dropbox, Obsidian, and VS Code do it: a single cross-
+platform watcher (chokidar is the obvious choice — wraps FSEvents
+on macOS, inotify on Linux, ReadDirectoryChangesW on Windows). The
+watcher emits add / change / unlink events; Workspace debounces a
+short window (typically 100–300ms) to coalesce the multi-event
+bursts editors produce.
+
+### Atomic-save patterns
+
+Many editors don't write in place. Vim, Sublime Text, and some
+Office apps write to a temp file and rename over the original. To
+the watcher this looks like:
+
+```
+add      foo.md.tmp
+unlink   foo.md
+rename   foo.md.tmp → foo.md
+```
+
+The debounce window collapses these into one "foo.md changed"
+event with the new content. No special-casing per editor required;
+the debounce handles it.
+
+### What happens on detection
+
+For each changed file, Workspace:
+
+1. Reads the new content from disk
+2. Reconciles against the in-log version using format-specific
+   logic
+3. Appends a write block to the workspace's data log
+4. Broadcasts to connected peers via Hyperswarm
+
+This is the same write path as in-app edits — the only difference
+is where the new content comes from (disk vs the app's UI).
+
+### Per-format reconciliation, not raw byte sync
+
+External edits are not blind byte-for-byte writes to the log. Each
+format has its own reconciliation logic so external editing doesn't
+break locator stability or section IDs:
+
+- **Markdown** — match-by-current-text on headings preserves
+  section IDs across edits, even when headings are reordered or
+  reworded slightly. See [`uri-scheme.md`](./uri-scheme.md).
+- **`.table/`** — `rows.ndjson` is parsed; row-level adds /
+  modifies / removes become individual log entries. Per-row
+  permission tiers are preserved.
+- **`.canvas`** — node-level diff against the in-log graph.
+- **Unknown formats** — opaque blob replace.
+
+Cost: editing a tier-gated `.table/` row externally is only
+possible if the user is authorised to read it. Otherwise the row
+doesn't appear in `rows.ndjson` on their disk and external tools
+can't edit what they can't see. This is the design — tier-gated
+content exists only as encrypted bytes outside the app.
+
+### Conflict with in-app edits
+
+If the same file is open in Workspace's editor AND edited
+externally, the external edit wins by recency (timestamp + log
+order). The in-app view reflects the on-disk state after the next
+watcher event. If the user has unsaved in-app changes when an
+external edit lands, the app prompts: keep in-app, accept external,
+or merge — the same pattern VS Code and Obsidian use when a file
+changes underneath them.
+
+### Things that can go wrong
+
+- **Case sensitivity** — macOS APFS default is case-insensitive;
+  Linux ext4 is case-sensitive. A workspace created on one and
+  copied to the other can hit name collisions. Workspace normalises
+  to lowercase internally for ID purposes; the on-disk name is
+  whatever the user picked.
+- **iCloud / OneDrive / Dropbox over a workspace** — these
+  services may rewrite files (compression, conflicted-copy
+  duplicates, dot-prefix renames). Nesting a workspace inside
+  another sync engine works but isn't recommended; the right move
+  is to share via the workspace's own protocol.
+- **Symlinks** — followed by default; circular symlinks abort the
+  affected subtree.
+- **Large-file writes mid-watch** — the watcher waits for size to
+  stabilise (a couple of consecutive identical-size reads) before
+  ingesting, so a 500MB video being copied in isn't ingested as
+  four partial copies.
+
+### Status
+
+Designed; implementation pending. Tracked alongside the rest of
+the working-tree work in
+[#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24).
+
+---
+
 ## Two ways to view a workspace — file or URL
 
 A workspace can be addressed two ways: as a folder on disk, or as a
