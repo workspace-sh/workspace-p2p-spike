@@ -30,7 +30,7 @@ app decisions made today don't paint us into a corner.
 ## What a workspace looks like on disk
 
 ```
-my-org.workspace/                      ← outer bundle (extension, à la .app / .xcworkspace)
+my-org.workspace/                      ← the workspace itself
 ├── policies/
 │   ├── code-of-conduct.md             ← plaintext, anyone in the workspace can read
 │   └── parental-leave.md
@@ -42,7 +42,7 @@ my-org.workspace/                      ← outer bundle (extension, à la .app /
 │       ├── schema.json                ← public field declarations + hidden-field IDs
 │       ├── rows.ndjson                ← rows; only public fields appear here
 │       └── bodies/
-└── .workspace/                        ← inner hidden metadata (dot-prefixed, à la .git)
+└── .workspace/                        ← hidden container metadata + encrypted state
     ├── manifest.json                  ← workspace identity, root DID, topic
     ├── attestation.json               ← root signature over the manifest
     ├── policy.json                    ← workspace's cleanup/rotation policy
@@ -50,17 +50,6 @@ my-org.workspace/                      ← outer bundle (extension, à la .app /
     ├── keys/                          ← this peer's local key state
     └── store/                         ← encrypted Hypercore blocks
 ```
-
-The name `workspace` does double duty by design:
-
-- **Outer** — `<name>.workspace/` uses `.workspace` as the file
-  extension. macOS Finder hides extensions, so lay users see "my-org"
-  and treat it as an ordinary folder. The whole folder *is* the
-  workspace — copy it, AirDrop it, drop it on a USB stick.
-- **Inner** — `.workspace/` is a dot-prefixed hidden directory inside
-  the bundle, holding machine-facing state. Hidden by default on
-  macOS/Linux the same way `.git/` is. Users see the working tree
-  (`policies/`, `data/`, …), not the machinery.
 
 Everything *above* `.workspace/` is the user-facing working tree:
 plaintext files arranged however the user wants. Everything *inside*
@@ -484,9 +473,9 @@ has clear semantics.
 
 ### Default: copy the folder
 
-The user opens Finder (or equivalent), drags the `<name>.workspace/`
-bundle to a USB stick / AirDrop / NAS / email attachment / cloud
-storage. No special export step, no Workspace app needed.
+The user opens Finder (or equivalent), drags the `.workspace/` folder
+to a USB stick / AirDrop / NAS / email attachment / cloud storage.
+No special export step, no Workspace app needed.
 
 What gets sent:
 
@@ -528,8 +517,8 @@ adds an envelope; everything else is regular file sharing.
 A separate UX flow: "export this `.table/` as a standalone file,"
 or "export the entire workspace as a plain folder." Decrypts
 everything the current user is authorised to read and writes it to a
-new folder *outside* the workspace bundle. No `.workspace/` metadata
-directory, no encrypted store, no envelopes — just the plaintext
+new folder *outside* the `.workspace/` container. No `.workspace/`
+metadata, no encrypted store, no envelopes — just the plaintext
 content.
 
 The result is a plain folder, suitable for use with non-Workspace
@@ -542,7 +531,7 @@ whatever the user does with it.
 
 | Operation | What it produces | UX |
 |---|---|---|
-| Copy folder | The `<name>.workspace/` bundle as-is | File system (default) |
+| Copy folder | The `.workspace/` folder as-is | File system (default) |
 | Share-with | Same + an envelope pre-addressed to recipient | In-app, one click |
 | Export plaintext | A plain folder, no permission model | In-app, explicit "leave the container" step |
 
