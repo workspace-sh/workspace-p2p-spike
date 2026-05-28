@@ -33,11 +33,21 @@ import {
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const hypercoreCrypto = require('hypercore-crypto') as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DHT = require('hyperdht') as any;
+
+// When SPAWN_BOOTSTRAP=1, the demo runs its own bootstrap in-process on
+// loopback rather than connecting to an external one. This is how the
+// containerised demo works — bootstrap + all peers in one process on
+// 127.0.0.1, exactly mirroring the proven single-host setup, with no
+// cross-container bridge networking to negotiate. See docker-compose.yml.
+const SPAWN_BOOTSTRAP = process.env.SPAWN_BOOTSTRAP === '1';
 
 const dec = new TextDecoder();
 const enc = new TextEncoder();
 
-const BOOTSTRAP_HOST = process.env.BOOTSTRAP_HOST ?? '127.0.0.1';
+// When spawning our own bootstrap, peers always reach it on loopback.
+const BOOTSTRAP_HOST = SPAWN_BOOTSTRAP ? '127.0.0.1' : (process.env.BOOTSTRAP_HOST ?? '127.0.0.1');
 const BOOTSTRAP_PORT = Number(process.env.BOOTSTRAP_PORT ?? 49737);
 
 function log(msg: string): void {
@@ -86,10 +96,25 @@ async function main(): Promise<void> {
   const carolStorage = join(tmpBase, 'carol-store');
 
   log('Acme — small-org demo over private hyperdht');
-  log(`bootstrap: ${BOOTSTRAP_HOST}:${BOOTSTRAP_PORT}`);
+  log(`bootstrap: ${BOOTSTRAP_HOST}:${BOOTSTRAP_PORT}${SPAWN_BOOTSTRAP ? ' (in-process)' : ''}`);
   log(`tmpdir:    ${tmpBase}`);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let inProcessBootstrap: any = null;
+
   try {
+    // ---------------------------------------------------------------------
+    // Optionally spawn an in-process bootstrap on loopback. Everything —
+    // bootstrap + all three peers — then lives in one process on 127.0.0.1,
+    // which is the configuration we verified works on the bare host.
+    // ---------------------------------------------------------------------
+    if (SPAWN_BOOTSTRAP) {
+      section('Spawn in-process bootstrap (loopback)');
+      inProcessBootstrap = DHT.bootstrapper(BOOTSTRAP_PORT, BOOTSTRAP_HOST);
+      await inProcessBootstrap.ready();
+      log(`  bootstrap ready on ${BOOTSTRAP_HOST}:${BOOTSTRAP_PORT}`);
+    }
+
     // ---------------------------------------------------------------------
     section('Bundle creation (same as demo:acme)');
     // ---------------------------------------------------------------------
@@ -237,6 +262,9 @@ async function main(): Promise<void> {
     await bobRt.close();
     await carolRt.close();
   } finally {
+    if (inProcessBootstrap) {
+      await inProcessBootstrap.destroy().catch(() => {});
+    }
     await rm(tmpBase, { recursive: true, force: true });
   }
 }
