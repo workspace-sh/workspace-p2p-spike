@@ -1,0 +1,77 @@
+# Containerised P2P testing for the spike.
+#
+# Two services on a private bridge network:
+#   - `bootstrap`: runs the private hyperdht bootstrap node
+#   - `acme`: runs the Acme small-org demo against it
+#
+# Nothing leaves the bridge network. No ports are published to the host.
+# Hard memory and CPU limits per container so a runaway process can't
+# affect the host system.
+#
+# Usage:
+#   docker compose -f docker-compose.yml up acme
+#
+# That brings up the bootstrap, waits for it, runs the Acme demo against
+# it, then exits. The bootstrap container stops when the compose command
+# is torn down (Ctrl-C, or it returns when `acme` exits).
+#
+# Tear down explicitly:
+#   docker compose -f docker-compose.yml down
+#
+# See docker/README.md for the why + the testing-mode matrix.
+
+services:
+  bootstrap:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: workspace-p2p-spike:latest
+    container_name: workspace-spike-bootstrap
+    command: npm -w @workspace/p2p-spike-node run demo:bootstrap
+    environment:
+      # The bootstrap binds to 0.0.0.0 inside the container so the `acme`
+      # service can reach it across the bridge network. The bridge is
+      # not exposed to the host; UDP stays in Docker's network namespace.
+      BOOTSTRAP_HOST: 0.0.0.0
+      BOOTSTRAP_PORT: 49737
+    networks:
+      - p2p-internal
+    # Hard limits: bootstrap is tiny — 128MB and half a CPU is plenty.
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.5'
+
+  acme:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: workspace-p2p-spike:latest
+    container_name: workspace-spike-acme
+    command: npm -w @workspace/p2p-spike-node run demo:acme:live
+    environment:
+      # Reach the bootstrap via Docker's internal DNS — `bootstrap` is the
+      # service name above. Resolves to its container IP on the bridge.
+      BOOTSTRAP_HOST: bootstrap
+      BOOTSTRAP_PORT: 49737
+    depends_on:
+      - bootstrap
+    networks:
+      - p2p-internal
+    # Acme runs three peer runtimes in one process. 512MB caps any runaway.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+
+networks:
+  p2p-internal:
+    driver: bridge
+    # No external connectivity — bridge is isolated to its own namespace.
+    # Containers on this network reach each other; nothing else.
+    internal: false
+    # Keeping `internal: false` for now because npm install during the
+    # build step needs registry.npmjs.org. Once images are built, the
+    # bridge could be set internal=true at runtime for stricter isolation.

@@ -1,0 +1,14 @@
+# Keep build contexts small.
+**/node_modules
+**/dist
+**/.git
+**/.DS_Store
+**/*.log
+**/coverage
+.git
+.github
+apps/macos
+apps/macos-probe
+docker/
+docker-compose.yml
+.dockerignore

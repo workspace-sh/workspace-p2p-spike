@@ -68,13 +68,15 @@ Uses the runtime's direct duplex pipe rather than the swarm. Same
 Hypercore replication code path, just deterministic and fast (~20ms).
 Doesn't touch the network at all.
 
-## `demo:bootstrap` + `demo:acme:live` — over a private DHT
+## `demo:bootstrap` + `demo:acme:live` — over a private DHT (host)
+
+> **Default to the containerised version below for iterative work.**
+> The bare-host scripts in this section are kept for cases where you
+> can't or don't want to run Docker.
 
 For exercising the actual Hyperswarm transport without polluting your
 network: run a **private hyperdht bootstrap node**, point peers at it
-instead of the public DHT. Useful for testing on a tethered
-connection, in CI, or anywhere you don't want N×UDP probes leaving
-your machine.
+instead of the public DHT.
 
 ```sh
 # Terminal 1 — start the private DHT (listens on 127.0.0.1:49737)
@@ -93,6 +95,36 @@ See [`docs/discovery-layers.md`](../../docs/discovery-layers.md) for
 the architectural framing of why this exists — it's the same
 mechanism a self-hosted org would use to run a workspace's swarm on
 their own infrastructure.
+
+## Containerised: `docker compose up acme` (recommended)
+
+For anything iterative or unattended, run the live demo **inside
+Docker**. The bootstrap and the peer process each get their own
+container on a private bridge network; nothing leaks to the host
+network namespace and each container has hard memory + CPU caps. If
+anything misbehaves, `docker compose down` cleans up reliably
+regardless of Node's state.
+
+From the repo root:
+
+```sh
+docker compose build               # once, or after dep changes
+docker compose up acme             # runs the Acme demo end-to-end
+```
+
+See [`docker/README.md`](../../docker/README.md) for the full
+rationale and the testing-mode matrix. Short version:
+
+| Mode | Use case |
+|---|---|
+| `npm test` | Day-to-day dev (no network) |
+| `demo:acme` | Multi-peer flows without sockets (direct pipe) |
+| `docker compose up acme` | Real swarm transport, fully isolated |
+| `demo:bootstrap` + `demo:acme:live` | Same as above but bare host |
+| `smoke` / `demo:end-to-end` | Verify the *public* DHT actually works |
+
+Default to the first two; reach for the container when you need the
+swarm transport; bare host only when Docker isn't an option.
 
 ## What none of these demos prove (each is its own tracked issue)
 
