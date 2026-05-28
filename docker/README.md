@@ -25,9 +25,63 @@ The bare-host scripts (`npm run smoke`, `demo:end-to-end`,
 real Hyperswarm or local-host setup. The container is the default for
 anything iterative.
 
+## Choosing a runtime
+
+"Docker" here means the *CLI contract* and the *OCI image format*, not
+necessarily Docker Inc.'s engine. Multiple runtimes implement the same
+`docker` CLI and the same Compose Specification — pick whichever fits
+your platform and licensing preferences.
+
+### macOS — three options, FOSS preferred
+
+| Runtime | Footprint | Licence | Install |
+|---|---|---|---|
+| **Colima** (recommended) | ~1–2GB | Apache 2.0 (fully FOSS) | `brew install colima docker` |
+| OrbStack | ~1–2GB | Source-available, commercial above small-team threshold | `brew install --cask orbstack` |
+| Docker Desktop | ~3–4GB | Commercial above $10M revenue / 250 people | [docs.docker.com/desktop](https://docs.docker.com/desktop/install/mac-install/) |
+
+**We lean Colima** — fully open-source (Apache 2.0 on Colima itself
+and on Lima, which it wraps), uses Apple's Virtualization.framework
+under the hood, no GUI daemon at idle, free of commercial-licensing
+considerations. OrbStack is polished and great as a UX but its
+source-available licence isn't open-source in the strict sense.
+
+After `brew install colima docker`, you need to start the VM once:
+
+```sh
+colima start
+```
+
+It stays running in the background until `colima stop`. The `docker`
+CLI then works as normal.
+
+### Linux — native Docker Engine
+
+```sh
+# Debian/Ubuntu
+sudo apt install docker.io
+# Or follow the distro-specific instructions at docs.docker.com
+
+# Optionally add yourself to the docker group
+sudo usermod -aG docker $USER
+```
+
+No VM, no Desktop GUI — the daemon runs natively. Lightest of any
+platform. Podman is a fully FOSS alternative (`alias docker=podman`
+and most things work).
+
+### Windows
+
+- **WSL2 + Docker Engine** — lightest. Install WSL2, install Docker
+  Engine inside the Linux distro. `docker` works from both Windows
+  PowerShell and the WSL shell.
+- **Docker Desktop for Windows** — path of least resistance; uses
+  WSL2 as its backend anyway.
+- **Podman Desktop** — FOSS alternative.
+
 ## Usage
 
-From the repo root:
+From the repo root, once you have a runtime installed and running:
 
 ```sh
 # Build the image once (or after dep changes)
@@ -46,6 +100,10 @@ Clean shutdown if anything's stuck:
 ```sh
 docker compose down
 ```
+
+The compose file and Dockerfile are runtime-agnostic — the commands
+above work identically across Colima, OrbStack, Docker Desktop,
+native Linux Docker Engine, Podman, and Podman Desktop.
 
 ## The testing matrix
 
