@@ -48,6 +48,78 @@ full format spec.
 
 ---
 
+## Quick start
+
+Three escalating ways to see this working, smallest first.
+
+### 1. Verify the install (no network)
+
+```sh
+git clone https://github.com/workspace-sh/workspace-p2p-spike.git
+cd workspace-p2p-spike
+npm install
+npm run typecheck
+npm run test
+```
+
+All tests pass in-process — cryptographic primitives, UCAN delegation
+chains, bundle round-trip, and Hypercore replication through a direct
+duplex pipe. No network, no external dependencies.
+
+### 2. Run the small-org demo (still no network)
+
+```sh
+npm -w @workspace/p2p-spike-node run demo:acme
+```
+
+Three "Acme" members — Alice, Bob, Carol — share a workspace. Alice
+creates a `.workspace/` bundle with envelopes for Bob and Carol; the
+data log carries content sealed under `K0_org`. Bob and Carol unwrap
+their envelopes and decrypt. Eve (no envelope, no key) cannot. Runs
+in one process via direct pipes — ~20ms end-to-end, deterministic,
+doesn't touch the network.
+
+### 3. Run the same demo over a real swarm, isolated in a container
+
+For exercising the actual Hyperswarm transport without touching the
+host network:
+
+```sh
+# Install Colima (Apache 2.0) + Docker CLI — skip what you already have
+brew install colima docker
+colima start
+
+# Build the image (first run only) and run the demo
+docker compose build
+docker compose up acme
+
+# Tear down
+colima stop
+```
+
+The bootstrap and peer process each run in their own container on a
+private bridge network. Nothing leaves the bridge. Hard memory + CPU
+caps protect against runaway processes. See
+[`docker/README.md`](./docker/README.md) for the runtime options —
+Colima recommended (fully FOSS); OrbStack and Docker Desktop work
+identically with the same compose file.
+
+### Other test paths
+
+- `npm -w @workspace/p2p-spike-node run smoke` — verifies the live
+  Hyperswarm DHT works (needs internet)
+- `npm -w @workspace/p2p-spike-node run demo:end-to-end` — bundle +
+  topic + replication over the live public DHT
+- `npm -w @workspace/p2p-spike-node run demo:bootstrap` +
+  `demo:acme:live` — same as the container demo but on the bare host
+
+See [`apps/node/README.md`](./apps/node/README.md) for the full
+testing-mode matrix.
+
+npm-only — Bun doesn't compose cleanly with `react-native-macos`.
+
+---
+
 ## Status
 
 | | |
@@ -133,28 +205,6 @@ workspace was distributed.
     ├── macos/native/                    ← P2PRuntimeModule (Obj-C++ TurboModule)
     └── macos-probe/                     ← Swift probe validating the NSTask path
 ```
-
----
-
-## Install + verify
-
-```sh
-npm install                                  # workspace install
-npm run typecheck                            # tsc --noEmit across all packages
-npm run test                                 # runs every package's tests
-```
-
-Smoke against the real Hyperswarm DHT (needs internet):
-
-```sh
-npm -w @workspace/p2p-spike-node run smoke
-```
-
-Spins up two `NodeRuntime` instances, joins them on a shared topic,
-appends three blocks on peer A, reads them back on peer B. Last
-verified replication: ~260 ms.
-
-npm-only. Bun does not compose cleanly with `react-native-macos`.
 
 ---
 
