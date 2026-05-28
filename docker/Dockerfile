@@ -6,7 +6,7 @@
 # toolchain that the slim image already includes via `python3` + `make` +
 # `g++`.
 
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 
 # Build tooling for native modules. `node-gyp` needs python3, make, and a
 # C++ compiler.

@@ -11,7 +11,7 @@ layers on top are designed and partially implemented.
 ## What was proven
 
 ### Node runtime
-Hypercore + Hyperswarm run cleanly under Node 20+. Two runtimes on the same machine replicated a log in ~260ms via the real DHT. Corestore v7 requires a filesystem path (RocksDB-backed); `:memory:` is a test shim over a temp directory.
+Hypercore + Hyperswarm run cleanly under Node 22.6+ (we use `--experimental-strip-types` for TypeScript execution without a transpile step, which needs that version). Two runtimes on the same machine replicated a log in ~260ms via the real DHT. Corestore v7 requires a filesystem path (RocksDB-backed); `:memory:` is a test shim over a temp directory.
 
 ### IPC — spawned Node child
 A parent process drives a `NodeRuntime` in a child process over line-delimited JSON-RPC on stdin/stdout. Full round-trip: `init → createLog → append → get → events → shutdown`. 8 integration tests, all green. The protocol is platform-neutral — the child code is unchanged regardless of who spawns it.

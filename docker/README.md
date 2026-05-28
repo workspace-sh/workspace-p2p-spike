@@ -123,7 +123,7 @@ explicitly verifying the public-DHT path.
 
 ## What's inside
 
-- `docker/Dockerfile` — Node 20 with the build toolchain for native
+- `docker/Dockerfile` — Node 22 with the build toolchain for native
   modules (`sodium-universal`, `hypercore-crypto`, `corestore`). Slim
   image; ~200MB.
 - `docker-compose.yml` — two services: `bootstrap` and `acme`, on a
