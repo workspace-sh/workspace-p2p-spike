@@ -82,35 +82,30 @@ doesn't touch the network.
 ### 3. Run the same demo over a real swarm, isolated in a container
 
 For exercising the actual Hyperswarm transport without touching the
-host network — one command:
+host network:
 
 ```sh
-brew install colima docker      # one-time, if you don't have them
-make demo                       # builds, auto-starts Colima, runs the demo
-make stop                       # when you're done
-```
+# One-time: install a container runtime (Colima is fully FOSS)
+brew install colima docker
 
-`make demo` checks for a container runtime, starts Colima if it's
-installed but not running, builds the image (if needed), then runs
-the Acme demo end-to-end. `make` with no args shows all available
-targets.
+# Per session: start the runtime
+colima start
+
+# Per run: build + run the demo. Brings up the bootstrap first
+# (via compose dependency), runs acme against it, auto-exits when
+# acme finishes.
+docker compose up --build --abort-on-container-exit acme
+
+# Per session: stop the runtime when you're done with all containers
+colima stop
+```
 
 The bootstrap and peer process each run in their own container on a
 private bridge network. Nothing leaves the bridge. Hard memory + CPU
 caps protect against runaway processes. See
 [`docker/README.md`](./docker/README.md) for the runtime options —
 Colima recommended (fully FOSS); OrbStack and Docker Desktop work
-identically with the same Makefile and compose file.
-
-If you'd rather drive `docker compose` directly:
-
-```sh
-colima start
-docker compose up --build --abort-on-container-exit acme
-colima stop
-```
-
-Same outcome, same compose file.
+identically with the same compose file.
 
 ### Other test paths
 
