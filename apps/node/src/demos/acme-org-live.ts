@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
 import { createRuntime } from '@workspace/p2p-runtime/node';
-import { seal, open } from '@workspace/p2p-runtime';
+import { encryptedLog } from '@workspace/p2p-runtime';
 import { principalFromSeed } from '@workspace/ucan-boundary';
 import {
   createBundle,
@@ -185,16 +185,17 @@ async function main(): Promise<void> {
     log(`  3 runtimes ready, configured to use bootstrap ${BOOTSTRAP_HOST}:${BOOTSTRAP_PORT}`);
 
     // ---------------------------------------------------------------------
-    section('Alice creates the data log; appends sealed events');
+    section('Alice creates the data log; appends change events');
     // ---------------------------------------------------------------------
 
-    const dataLog = await aliceRt.createLog();
+    // Wrap with K0_org — Alice appends plaintext; the wrapper seals each
+    // block transparently before it hits the log.
+    const dataLogRaw = await aliceRt.createLog();
+    const dataLog = encryptedLog(dataLogRaw, k0Org);
     for (const file of SAMPLE_FILES) {
-      const event = changeEvent(alice.did(), file.path, file.content);
-      const sealedEvent = seal(event, k0Org);
-      await dataLog.append(sealedEvent);
+      await dataLog.append(changeEvent(alice.did(), file.path, file.content));
     }
-    log(`  appended ${SAMPLE_FILES.length} sealed events`);
+    log(`  appended ${SAMPLE_FILES.length} events (sealed under K0_org)`);
 
     // ---------------------------------------------------------------------
     section('Topic join + replication over the private swarm');
@@ -206,27 +207,29 @@ async function main(): Promise<void> {
     await bobRt.joinTopic(topic);
     await carolRt.joinTopic(topic);
 
-    const bobLog = await bobRt.openLog(dataLog.key);
-    const carolLog = await carolRt.openLog(dataLog.key);
+    const bobRaw = await bobRt.openLog(dataLogRaw.key);
+    const carolRaw = await carolRt.openLog(dataLogRaw.key);
+    const bobLog = encryptedLog(bobRaw, bobK0);
+    const carolLog = encryptedLog(carolRaw, carolK0);
 
     const deadlineMs = 30_000;
     const start = Date.now();
     let lastProgress = '';
     while (
-      (bobLog.length < SAMPLE_FILES.length || carolLog.length < SAMPLE_FILES.length) &&
+      (bobRaw.length < SAMPLE_FILES.length || carolRaw.length < SAMPLE_FILES.length) &&
       Date.now() - start < deadlineMs
     ) {
       await new Promise((r) => setTimeout(r, 250));
-      const progress = `bob=${bobLog.length}, carol=${carolLog.length}`;
+      const progress = `bob=${bobRaw.length}, carol=${carolRaw.length}`;
       if (progress !== lastProgress) {
         log(`  progress: ${progress} (t+${Date.now() - start}ms)`);
         lastProgress = progress;
       }
     }
 
-    if (bobLog.length < SAMPLE_FILES.length || carolLog.length < SAMPLE_FILES.length) {
+    if (bobRaw.length < SAMPLE_FILES.length || carolRaw.length < SAMPLE_FILES.length) {
       throw new Error(
-        `replication timed out (bob=${bobLog.length}, carol=${carolLog.length}) — ` +
+        `replication timed out (bob=${bobRaw.length}, carol=${carolRaw.length}) — ` +
           `is the bootstrap node running on ${BOOTSTRAP_HOST}:${BOOTSTRAP_PORT}?`,
       );
     }
@@ -236,9 +239,9 @@ async function main(): Promise<void> {
     section('Decrypt + verify');
     // ---------------------------------------------------------------------
 
+    // Read through the wrapped log — plaintext out, seal/open invisible.
     for (let i = 0; i < bobLog.length; i++) {
-      const sealed = await bobLog.get(i);
-      const event = JSON.parse(dec.decode(open(sealed, bobK0))) as {
+      const event = JSON.parse(dec.decode(await bobLog.get(i))) as {
         actor: string;
         path: string;
         content: string;
@@ -246,8 +249,7 @@ async function main(): Promise<void> {
       log(`  bob   block[${i}]: ${event.path}`);
     }
     for (let i = 0; i < carolLog.length; i++) {
-      const sealed = await carolLog.get(i);
-      const event = JSON.parse(dec.decode(open(sealed, carolK0))) as {
+      const event = JSON.parse(dec.decode(await carolLog.get(i))) as {
         actor: string;
         path: string;
         content: string;

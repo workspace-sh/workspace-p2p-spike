@@ -15,6 +15,7 @@ export type {
 export { didFromSeed, didFromPublicKey, publicKeyFromDid } from './did.ts';
 export { wrap, unwrap, WRAP_OVERHEAD } from './wrap.ts';
 export { seal, open, SEAL_OVERHEAD, SEAL_KEY_BYTES } from './seal.ts';
+export { encryptedLog } from './encrypted-log.ts';
 export {
   sign,
   verify,

@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
 import { NodeRuntime } from '@workspace/p2p-runtime/node';
-import { seal, open } from '@workspace/p2p-runtime';
+import { open, encryptedLog } from '@workspace/p2p-runtime';
 import { principalFromSeed } from '@workspace/ucan-boundary';
 import {
   createBundle,
@@ -244,32 +244,35 @@ async function main(): Promise<void> {
     log(`  paired Alice ↔ Bob and Alice ↔ Carol (direct duplex pipes)`);
 
     // ---------------------------------------------------------------------
-    section('Alice creates the data log; appends sealed change events');
+    section('Alice creates the data log; appends change events');
     // ---------------------------------------------------------------------
 
-    const dataLog = await aliceRt.createLog();
-    log(`  data log key: ${dataLog.key.slice(0, 24)}…`);
+    // Wrap the data log with K0_org. From here on Alice appends *plaintext*
+    // — the wrapper seals each block transparently before it hits the log.
+    const dataLogRaw = await aliceRt.createLog();
+    const dataLog = encryptedLog(dataLogRaw, k0Org);
+    log(`  data log key: ${dataLog.key.slice(0, 24)}…  (blocks sealed under K0_org)`);
 
     for (const file of SAMPLE_FILES) {
       const event = changeEvent(alice.did(), file.path, file.content);
-      const sealedEvent = seal(event, k0Org);
-      await dataLog.append(sealedEvent);
-      log(
-        `  appended sealed event for ${file.path} ` +
-          `(plaintext ${event.length}B → sealed ${sealedEvent.length}B)`,
-      );
+      await dataLog.append(event); // plaintext in; ciphertext on disk + wire
+      log(`  appended event for ${file.path} (${event.length}B plaintext)`);
     }
 
     // ---------------------------------------------------------------------
     section('Bob and Carol open the log; replication kicks in');
     // ---------------------------------------------------------------------
 
-    const bobLog = await bobRt.openLog(dataLog.key);
-    const carolLog = await carolRt.openLog(dataLog.key);
+    // Each peer keeps a reference to the raw replica (for the block count and
+    // the Eve demonstration) and a K0_org-wrapped view for reading plaintext.
+    const bobRaw = await bobRt.openLog(dataLogRaw.key);
+    const carolRaw = await carolRt.openLog(dataLogRaw.key);
+    const bobLog = encryptedLog(bobRaw, bobK0);
+    const carolLog = encryptedLog(carolRaw, carolK0);
 
     const start = Date.now();
     await waitFor(
-      () => bobLog.length >= SAMPLE_FILES.length && carolLog.length >= SAMPLE_FILES.length,
+      () => bobRaw.length >= SAMPLE_FILES.length && carolRaw.length >= SAMPLE_FILES.length,
       5_000,
       'replication',
     );
@@ -282,31 +285,27 @@ async function main(): Promise<void> {
     section('Reading the log: Bob and Carol decrypt; Eve cannot');
     // ---------------------------------------------------------------------
 
+    // Bob and Carol read through the wrapped log — plaintext comes out, the
+    // seal/open is invisible to them.
     log('  Bob (holds K0_org):');
     for (let i = 0; i < bobLog.length; i++) {
-      const sealed = await bobLog.get(i);
-      const opened = open(sealed, bobK0);
-      const event = JSON.parse(dec.decode(opened)) as {
+      const event = JSON.parse(dec.decode(await bobLog.get(i))) as {
         actor: string;
         path: string;
         content: string;
       };
-      const firstLine = event.content.split('\n')[0];
-      log(`    ${event.path}  →  "${firstLine}"`);
+      log(`    ${event.path}  →  "${event.content.split('\n')[0]}"`);
     }
 
     log('');
     log('  Carol (holds K0_org):');
     for (let i = 0; i < carolLog.length; i++) {
-      const sealed = await carolLog.get(i);
-      const opened = open(sealed, carolK0);
-      const event = JSON.parse(dec.decode(opened)) as {
+      const event = JSON.parse(dec.decode(await carolLog.get(i))) as {
         actor: string;
         path: string;
         content: string;
       };
-      const firstLine = event.content.split('\n')[0];
-      log(`    ${event.path}  →  "${firstLine}"`);
+      log(`    ${event.path}  →  "${event.content.split('\n')[0]}"`);
     }
 
     // Eve — outside the workspace, no envelope, no K0_org. Suppose she
@@ -317,8 +316,10 @@ async function main(): Promise<void> {
     log('');
     log('  Eve (no envelope, no K0_org — trying random keys):');
     let eveDecryptFailures = 0;
-    for (let i = 0; i < bobLog.length; i++) {
-      const sealed = await bobLog.get(i);
+    for (let i = 0; i < bobRaw.length; i++) {
+      // Eve reads the *raw* replica — the ciphertext that's actually on the
+      // wire and disk — and tries a random key.
+      const sealed = await bobRaw.get(i);
       const guessedKey = new Uint8Array(32);
       crypto.getRandomValues(guessedKey);
       try {
@@ -329,7 +330,7 @@ async function main(): Promise<void> {
         log(`    block[${i}]: ${sealed.length}B opaque ciphertext, decrypt failed`);
       }
     }
-    log(`  Eve: ${eveDecryptFailures}/${bobLog.length} decrypts failed (expected: all)`);
+    log(`  Eve: ${eveDecryptFailures}/${bobRaw.length} decrypts failed (expected: all)`);
 
     // ---------------------------------------------------------------------
     section('Summary');
