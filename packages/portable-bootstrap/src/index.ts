@@ -440,3 +440,12 @@ export { writeBundleFolder, readBundleFolder } from './folder.ts';
 // replicated Hypercore log and scans it for deliveries addressed to a peer.
 export { publishDelivery, scanDeliveries } from './key-delivery.ts';
 export type { Delivery, ScanResult, ScanDeliveriesOptions } from './key-delivery.ts';
+
+// Topic-layer auth (#10) — the connect-time membership gate. Decides whether
+// to accept a swarm connection from a peer presenting a UCAN membership proof.
+export { verifyMembership, createMembershipProof } from './membership.ts';
+export type {
+  MembershipProof,
+  VerifyMembershipInput,
+  MembershipVerdict,
+} from './membership.ts';
