@@ -28,6 +28,8 @@ Bonus: Hypercore's append events crossed the NSTask boundary unprompted. The "ze
 ### `@workspace/p2p-runtime` crypto additions
 
 - `wrap.ts` — X25519 ECDH sealed envelopes for symmetric key delivery
+- `seal.ts` — XSalsa20-Poly1305 symmetric AEAD (`seal` / `open`) for content under a workspace/tier key
+- `encrypted-log.ts` — `encryptedLog(log, key)` wraps any `Log` so blocks seal on append / open on get; tier-gated content rides the same replication path as ciphertext
 - `attestation.ts` — root attestation sign/verify (ed25519)
 - `did.ts` extensions — `did:key:z6Mk…` encode + decode (bidirectional)
 
@@ -37,11 +39,14 @@ UCAN delegation boundary module — every ucanto call confined to one file so a 
 
 ### `@workspace/portable-bootstrap`
 
-Bundle creation and consumption — composes wrap + ucan + attestation into the offline `.workspace` envelope flow. Two peers, one issues a sealed envelope to the other's DID, the recipient validates the attestation, unwraps the keys, and joins. End-to-end demonstrated.
+Two-carrier permissions delivery, sharing one envelope atom:
+
+- **Bundle (offline first-contact)** — `createBundle` / `consumeBundle` compose wrap + ucan + attestation into the `.workspace` envelope flow, plus `writeBundleFolder` / `readBundleFolder` for disk round-trip. A recipient validates the attestation, unwraps the keys, joins.
+- **Live key delivery log (#9, steady-state)** — `publishDelivery` / `scanDeliveries` over a replicated Hypercore: an admin appends a sealed envelope addressed to a peer who joined *after* creation; that peer scans from a cursor, validates the UCAN against the workspace root, and unwraps. Same `createEnvelope` / `consumeEnvelope` as the bundle.
 
 ### Tests
 
-**65 tests green across the three packages**, typecheck clean.
+**95 tests green across the three packages**, typecheck clean.
 
 ### DID identity
 
@@ -91,7 +96,7 @@ On top of the runtime sits the permissions layer (wrap + UCAN + attestation + po
 
 ## Open work (tracked on the project board)
 
-- **Live key delivery log** ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)) — the live-swarm carrier counterpart to bundled envelopes
+- ~~**Live key delivery log** ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9))~~ — **implemented**; remaining: scan-efficiency tuning + GC of superseded blocks
 - **Topic-layer authentication** ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) — UCAN check at the noise handshake; the second revocation lever
 - **Autobase wrapper** ([#11](https://github.com/workspace-sh/workspace-p2p-spike/issues/11)) + **merge strategy** ([#12](https://github.com/workspace-sh/workspace-p2p-spike/issues/12)) — multi-writer document API
 - **Identity recovery / device linking** ([#17](https://github.com/workspace-sh/workspace-p2p-spike/issues/17))

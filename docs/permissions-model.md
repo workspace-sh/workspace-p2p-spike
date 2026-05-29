@@ -162,13 +162,27 @@ addressed to them, unwrap, and ignore the rest.
 ```
 Key delivery Hypercore log (replicated to all org peers):
 
-Block 0: { ucan: ..., wrapped_key: ..., recipient: did:key:zABC… }
-Block 1: { ucan: ..., wrapped_key: ..., recipient: did:key:zDEF… }
+Block 0: { kind: "workspace/key-delivery@1", envelope: { recipient: zABC…, ucan, wrappedKey, … } }
+Block 1: { kind: "workspace/key-delivery@1", envelope: { recipient: zDEF…, ucan, wrappedKey, … } }
 Block 2: <revocation block — see Revocation below>
 ...
 ```
 
-To be implemented in [#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9).
+Each block is a tagged record. The `kind` tag lets the log carry more
+than key deliveries later (revocation blocks the obvious next variant);
+scanners skip records of a `kind` they don't recognise. The `envelope`
+is byte-identical to a bundle envelope — same `createEnvelope` produces
+it, same `consumeEnvelope` validates and unwraps it.
+
+**Implemented** in `@workspace/portable-bootstrap`
+([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)):
+`publishDelivery(log, envelope)` appends; `scanDeliveries(log, {selfDid,
+selfSecretKey, rootDid, fromCursor})` reads from a cursor, returns the
+deliveries addressed to this peer (validated + unwrapped) plus a new
+cursor to resume from. A block that fails validation routes to an
+`onError` callback rather than aborting the scan — deliveries arrive
+over time and one bad block shouldn't blind a peer to the rest.
+
 Used when:
 
 - An admin invites someone after the workspace is already live
@@ -384,6 +398,12 @@ address is never shared with the wider org.
   (`packages/ucan-boundary`)
 - **Bootstrap envelopes** — bundle creation, consumption, JSON
   serialisation, tamper detection (`packages/portable-bootstrap`)
+- **Live key delivery log (#9)** — `publishDelivery` / `scanDeliveries`
+  over a replicated Hypercore; the steady-state carrier for peers who
+  join after creation (`packages/portable-bootstrap/src/key-delivery.ts`)
+- **Transparent log encryption** — `encryptedLog(log, key)` seals on
+  append / opens on get, so tier-gated content rides the same
+  replication path as ciphertext (`packages/p2p-runtime/src/encrypted-log.ts`)
 
 ### Resolved (design + accepted contracts)
 
@@ -396,9 +416,9 @@ address is never shared with the wider org.
 
 ### Open engineering work
 
-- **Live key delivery log (#9)** — block format defined above; needs
-  implementation, scan efficiency tuning, GC of consumed delivery
-  blocks
+- **Key delivery log — remaining polish (#9)** — core implemented;
+  still want scan-efficiency tuning (index by recipient) and GC of
+  superseded delivery blocks for long-lived workspaces
 - **Topic-layer auth (#10)** — Hyperswarm supports per-connection
   authentication via the noise handshake; needs UCAN check on
   presented credential

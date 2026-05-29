@@ -1,15 +1,15 @@
 # @workspace/p2p-spike-node
 
-Scripts for exercising the spike. Two cover the design end-to-end on
-direct pipes; two more exercise the swarm transport (one over the
-public DHT, one over a private DHT you run yourself); one is the
-private DHT itself.
+Scripts for exercising the spike. Several cover the design end-to-end
+on direct pipes (no network); others exercise the swarm transport (over
+the public DHT or a private one you run yourself).
 
 ```
 src/demos/
 ├── smoke.ts            ← live DHT, runtime-only (2 peers)
 ├── end-to-end.ts       ← bundle → topic → log, via live DHT
 ├── acme-org.ts         ← small-org walk-through, direct pipe (no network)
+├── key-delivery.ts     ← inviting a peer AFTER creation (#9), direct pipe
 ├── bootstrap-dht.ts    ← private hyperdht bootstrap node
 └── acme-org-live.ts    ← acme-org, but over the private DHT
 ```
@@ -67,6 +67,23 @@ npm -w @workspace/p2p-spike-node run demo:acme
 Uses the runtime's direct duplex pipe rather than the swarm. Same
 Hypercore replication code path, just deterministic and fast (~20ms).
 Doesn't touch the network at all.
+
+## `demo:key-delivery` — inviting a peer after creation (#9)
+
+The two-carrier model's *live* half. The bundle handles offline
+first-contact; this handles the peer who joins on Tuesday when the
+bundle was cut on Friday. Alice (admin) appends one sealed envelope
+addressed to Dave's DID to a replicated key delivery log; Dave scans
+from his cursor, validates the UCAN against the workspace root, unwraps
+K0_org, and then decrypts actual workspace content with it — without
+re-cutting any bundle or touching anyone else's keys.
+
+```sh
+npm -w @workspace/p2p-spike-node run demo:key-delivery
+```
+
+Direct pipe, no network. Demonstrates `publishDelivery` / `scanDeliveries`
+from `@workspace/portable-bootstrap` composed with `encryptedLog`.
 
 ## `demo:bootstrap` + `demo:acme:live` — over a private DHT (host)
 
@@ -132,11 +149,10 @@ swarm transport; bare host only when Docker isn't an option.
   runtime API yet — the scripts use independent identities for the
   bundle vs the runtime
 - Topic-layer auth (#10) doesn't gate connections by UCAN today
-- Autobase wrapper / encrypted store (#11) — `seal`/`open` runs at
-  the application layer in the Acme demos; the runtime doesn't yet
-  handle encryption transparently
-- Live key delivery log (#9) — envelopes are in the bundle today;
-  the live-channel carrier for new joiners is pending
+- Autobase multi-writer (#11) — the demos use a single-writer log per
+  peer; concurrent multi-writer editing with conflict resolution is
+  pending. (Transparent block encryption itself is done — `encryptedLog`
+  wraps any log; the demos use it.)
 - LAN discovery (mDNS) — designed in
   [`docs/discovery-layers.md`](../../docs/discovery-layers.md);
   not yet implemented

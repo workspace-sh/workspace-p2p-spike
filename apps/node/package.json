@@ -8,6 +8,7 @@
     "smoke": "node --experimental-strip-types --no-warnings src/demos/smoke.ts",
     "demo:end-to-end": "node --experimental-strip-types --no-warnings src/demos/end-to-end.ts",
     "demo:acme": "node --experimental-strip-types --no-warnings src/demos/acme-org.ts",
+    "demo:key-delivery": "node --experimental-strip-types --no-warnings src/demos/key-delivery.ts",
     "demo:bootstrap": "node --experimental-strip-types --no-warnings src/demos/bootstrap-dht.ts",
     "demo:acme:live": "node --experimental-strip-types --no-warnings src/demos/acme-org-live.ts"
   },

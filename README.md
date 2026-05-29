@@ -134,8 +134,9 @@ npm-only — Bun doesn't compose cleanly with `react-native-macos`.
 | Permissions layer — UCAN delegation boundary | implemented |
 | Permissions layer — root attestation | implemented |
 | Permissions layer — bootstrap envelopes | implemented |
+| Permissions layer — transparent log encryption (`encryptedLog`) | implemented |
+| Live key delivery log ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)) | implemented (polish pending) |
 | `workspace://` URI scheme + `.workspace` format + discovery | designed (specs locked); see [`docs/`](./docs/) |
-| Live key delivery log ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)) | pending |
 | Topic-layer authentication ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) | pending |
 | Autobase wrapper ([#11](https://github.com/workspace-sh/workspace-p2p-spike/issues/11)) | pending |
 | `.workspace` folder + archive shape ([#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24)) | designed; implementation pending |

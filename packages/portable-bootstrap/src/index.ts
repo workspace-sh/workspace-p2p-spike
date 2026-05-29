@@ -112,6 +112,46 @@ export interface CreateBundleInput {
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 /**
+ * Default expiration: one year from now (whole-second epoch). Computed at
+ * call time, not from a workspace's `createdAt` (which may be long ago for a
+ * re-issued envelope delivering keys to a newly-joined peer).
+ */
+function defaultExpiration(): number {
+  return Math.floor(Date.now() / 1000) + ONE_YEAR_SECONDS;
+}
+
+/**
+ * Build a single sealed envelope: a UCAN delegation (root → recipient on the
+ * resource) plus the symmetric key wrapped to the recipient's DID.
+ *
+ * This is the atom both carriers share — the offline bundle
+ * (`createBundle`) packs many of these into `.workspace/envelopes/`; the live
+ * key delivery log (`publishDelivery`) appends them one at a time. Same
+ * shape, same crypto, same validation on the other side.
+ */
+export async function createEnvelope(
+  input: RecipientInput,
+  root: Principal,
+): Promise<Envelope> {
+  const expiration = input.expiration ?? defaultExpiration();
+  const ucan = await issueDelegation({
+    issuer: root,
+    audience: input.did,
+    capabilities: [input.capability],
+    expiration,
+  });
+  const ucanBytes = await ucanToBytes(ucan);
+  const recipientPublicKey = publicKeyFromDid(input.did);
+  const wrappedKey = wrap(input.key, recipientPublicKey);
+  return {
+    recipient: input.did,
+    resource: input.resource,
+    ucan: ucanBytes,
+    wrappedKey,
+  };
+}
+
+/**
  * Produce a bundle in memory. No disk I/O — caller is responsible for
  * serialising and writing to wherever (`.workspace/` directory, archive, etc.).
  */
@@ -142,31 +182,10 @@ export async function createBundle(input: CreateBundleInput): Promise<Bundle> {
   };
   const attestation = signWorkspaceAttestation(attestationPayload, input.rootSecretKey);
 
-  // Each recipient gets: a UCAN delegation (root → recipient on the resource)
-  // plus a wrapped key. Bundled together as one envelope.
-  // Default expiration is one year from the moment of bundle creation, not
-  // from the workspace's `createdAt` (which may be long ago for re-issued
-  // bundles delivering keys to a newly-joined peer).
-  const defaultExpiration = Math.floor(Date.now() / 1000) + ONE_YEAR_SECONDS;
+  // Each recipient gets one sealed envelope. Same atom the live key delivery
+  // log appends one-at-a-time — see createEnvelope.
   const envelopes: Envelope[] = await Promise.all(
-    input.recipients.map(async (r) => {
-      const expiration = r.expiration ?? defaultExpiration;
-      const ucan = await issueDelegation({
-        issuer: input.root,
-        audience: r.did,
-        capabilities: [r.capability],
-        expiration,
-      });
-      const ucanBytes = await ucanToBytes(ucan);
-      const recipientPublicKey = publicKeyFromDid(r.did);
-      const wrappedKey = wrap(r.key, recipientPublicKey);
-      return {
-        recipient: r.did,
-        resource: r.resource,
-        ucan: ucanBytes,
-        wrappedKey,
-      };
-    }),
+    input.recipients.map((r) => createEnvelope(r, input.root)),
   );
 
   return { manifest, attestation, envelopes };
@@ -197,6 +216,60 @@ export interface ConsumedBundle {
 export interface ConsumeBundleOptions {
   /** Override "now" in whole seconds — for tests. */
   now?: number;
+}
+
+export interface ConsumeEnvelopeOptions {
+  /** Override "now" in whole seconds — for tests. */
+  now?: number;
+}
+
+/**
+ * Validate and unwrap a single envelope from one peer's perspective. The atom
+ * both carriers share on the receiving side — `consumeBundle` calls it for the
+ * envelope it finds on disk; `scanDeliveries` calls it for each delivery block
+ * addressed to this peer.
+ *
+ *   1. Decode the UCAN; check its audience is this peer
+ *   2. Validate the delegation chain terminates at the workspace root
+ *      (`rootDid` is the canIssue authority)
+ *   3. Unwrap the symmetric key with this peer's secret key
+ *
+ * Throws on audience mismatch, UCAN validation failure, or unwrap failure —
+ * a partial trust signal is worse than refusing to proceed.
+ */
+export async function consumeEnvelope(
+  envelope: Envelope,
+  selfDid: Did,
+  selfSecretKey: Uint8Array,
+  rootDid: Did,
+  opts: ConsumeEnvelopeOptions = {},
+): Promise<ConsumedEnvelope> {
+  if (selfSecretKey.length !== 64) {
+    throw new Error(
+      `selfSecretKey must be 64 bytes (sodium format), got ${selfSecretKey.length}`,
+    );
+  }
+  const ucan = await ucanFromBytes(envelope.ucan);
+  if (ucan.meta.audience !== selfDid) {
+    throw new Error(
+      `envelope UCAN audience mismatch: expected ${selfDid}, got ${ucan.meta.audience}`,
+    );
+  }
+  const rootForResource: RootForResource = () => rootDid;
+  const validation = await validateDelegation(ucan, {
+    rootForResource,
+    ...(opts.now !== undefined ? { now: opts.now } : {}),
+  });
+  if (!validation.ok) {
+    throw new Error(`envelope UCAN validation failed: ${validation.error}`);
+  }
+  const key = unwrap(envelope.wrappedKey, selfSecretKey);
+  return {
+    resource: envelope.resource,
+    key,
+    ucan,
+    capability: validation.capability,
+  };
 }
 
 /**
@@ -252,35 +325,20 @@ export async function consumeBundle(
     };
   }
 
-  // Step 3: validate UCAN. rootForResource declares the workspace's root as
-  // the authority for any resource this bundle covers.
-  const ucan = await ucanFromBytes(myEnvelope.ucan);
-  if (ucan.meta.audience !== selfDid) {
-    throw new Error(
-      `envelope UCAN audience mismatch: expected ${selfDid}, got ${ucan.meta.audience}`,
-    );
-  }
-  const rootForResource: RootForResource = () => bundle.manifest.rootDid;
-  const validation = await validateDelegation(ucan, {
-    rootForResource,
-    ...(opts.now !== undefined ? { now: opts.now } : {}),
-  });
-  if (!validation.ok) {
-    throw new Error(`envelope UCAN validation failed: ${validation.error}`);
-  }
-
-  // Step 4: unwrap the symmetric key.
-  const key = unwrap(myEnvelope.wrappedKey, selfSecretKey);
+  // Steps 3–4: validate the UCAN against the workspace root and unwrap the
+  // key. Shared with the live key delivery log via consumeEnvelope.
+  const mine = await consumeEnvelope(
+    myEnvelope,
+    selfDid,
+    selfSecretKey,
+    bundle.manifest.rootDid,
+    opts.now !== undefined ? { now: opts.now } : {},
+  );
 
   return {
     workspaceId: bundle.manifest.workspaceId,
     rootDid: bundle.manifest.rootDid,
-    mine: {
-      resource: myEnvelope.resource,
-      key,
-      ucan,
-      capability: validation.capability,
-    },
+    mine,
   };
 }
 
@@ -302,11 +360,31 @@ interface SerialisedAttestation {
   rootDid: Did;
 }
 
-interface SerialisedEnvelope {
+export interface SerialisedEnvelope {
   recipient: Did;
   resource: string;
   ucan: string; // base64
   wrappedKey: string; // base64
+}
+
+/** Serialise a single envelope to a plain JSON-able object. */
+export function serialiseEnvelope(e: Envelope): SerialisedEnvelope {
+  return {
+    recipient: e.recipient,
+    resource: e.resource,
+    ucan: bytesToBase64(e.ucan),
+    wrappedKey: bytesToBase64(e.wrappedKey),
+  };
+}
+
+/** Restore a single envelope from its serialised form. */
+export function deserialiseEnvelope(s: SerialisedEnvelope): Envelope {
+  return {
+    recipient: s.recipient,
+    resource: s.resource,
+    ucan: base64ToBytes(s.ucan),
+    wrappedKey: base64ToBytes(s.wrappedKey),
+  };
 }
 
 /** Serialise a bundle to a plain JSON-able object. */
@@ -319,12 +397,7 @@ export function serialiseBundle(bundle: Bundle): SerialisedBundle {
       signature: bytesToBase64(bundle.attestation.signature),
       rootDid: bundle.attestation.rootDid,
     },
-    envelopes: bundle.envelopes.map((e) => ({
-      recipient: e.recipient,
-      resource: e.resource,
-      ucan: bytesToBase64(e.ucan),
-      wrappedKey: bytesToBase64(e.wrappedKey),
-    })),
+    envelopes: bundle.envelopes.map(serialiseEnvelope),
   };
 }
 
@@ -338,12 +411,7 @@ export function deserialiseBundle(s: SerialisedBundle): Bundle {
       signature: base64ToBytes(s.attestation.signature),
       rootDid: s.attestation.rootDid,
     },
-    envelopes: s.envelopes.map((e) => ({
-      recipient: e.recipient,
-      resource: e.resource,
-      ucan: base64ToBytes(e.ucan),
-      wrappedKey: base64ToBytes(e.wrappedKey),
-    })),
+    envelopes: s.envelopes.map(deserialiseEnvelope),
   };
 }
 
@@ -367,3 +435,8 @@ export type { CapabilityDescriptor, DelegationToken, Principal } from '@workspac
 // Filesystem pack/unpack — write a bundle to a `.workspace/` folder layout
 // per docs/workspace-format.md and read it back.
 export { writeBundleFolder, readBundleFolder } from './folder.ts';
+
+// Live key delivery log (#9) — the second carrier. Publishes envelopes to a
+// replicated Hypercore log and scans it for deliveries addressed to a peer.
+export { publishDelivery, scanDeliveries } from './key-delivery.ts';
+export type { Delivery, ScanResult, ScanDeliveriesOptions } from './key-delivery.ts';
