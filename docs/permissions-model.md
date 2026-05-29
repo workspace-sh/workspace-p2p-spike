@@ -291,6 +291,27 @@ To close this lever:
 Topic membership is the second lever** — network-layer access, distinct
 from encryption-layer access.
 
+**Implemented (#10).** Connection-time authentication works end-to-end:
+
+- The runtime derives its Hyperswarm Noise keypair from the same seed as
+  its `did:key` (`CreateRuntimeOptions.identitySeed`), so a peer's
+  authenticated connection key *is* its DID. This binding is what makes
+  the proof unspoofable.
+- `CreateRuntimeOptions.auth` gates replication: on each connection the
+  runtime exchanges membership proofs over a `workspace/auth@1` channel
+  (on the connection's shared Protomux, alongside replication) and calls
+  the `verify` hook before replicating. Reject or timeout drops the
+  connection.
+- `verifyMembership` (`@workspace/portable-bootstrap`) is the decision:
+  it binds the presented UCAN's audience to the authenticated key,
+  checks revocation, and validates the chain to the workspace root. A
+  sniffed UCAN replayed on another peer's connection fails the audience
+  bind.
+
+The remaining piece is **topic rotation** (point 2) — rotating the
+discovery topic alongside `K0_org` on departure so a revoked peer can't
+even rediscover the swarm. Tracked with the broader rotation work.
+
 ### Revocation notice block on the key delivery log
 
 When a peer is revoked, an admin appends a signed **revocation block**
@@ -404,6 +425,10 @@ address is never shared with the wider org.
 - **Transparent log encryption** — `encryptedLog(log, key)` seals on
   append / opens on get, so tier-gated content rides the same
   replication path as ciphertext (`packages/p2p-runtime/src/encrypted-log.ts`)
+- **Topic-layer auth (#10)** — `verifyMembership`
+  (`packages/portable-bootstrap/src/membership.ts`) + the runtime's
+  connection gate (`CreateRuntimeOptions.auth` + Noise-key/DID binding via
+  `identitySeed`); rejects non-member connections before replication
 
 ### Resolved (design + accepted contracts)
 
@@ -419,9 +444,10 @@ address is never shared with the wider org.
 - **Key delivery log — remaining polish (#9)** — core implemented;
   still want scan-efficiency tuning (index by recipient) and GC of
   superseded delivery blocks for long-lived workspaces
-- **Topic-layer auth (#10)** — Hyperswarm supports per-connection
-  authentication via the noise handshake; needs UCAN check on
-  presented credential
+- **Topic rotation on departure** — the second half of topic-layer auth
+  (#10): rotate the discovery topic alongside `K0_org` so a revoked peer
+  can't rediscover the swarm. (Connection-time membership auth itself is
+  implemented — see above.)
 - **Autobase wrapper (#11)** + **merge strategy (#12)** — multi-writer
   document API + concurrent-edit semantics
 - **Revocation notice block + policy enforcement** — block format

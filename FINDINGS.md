@@ -43,10 +43,11 @@ Two-carrier permissions delivery, sharing one envelope atom:
 
 - **Bundle (offline first-contact)** — `createBundle` / `consumeBundle` compose wrap + ucan + attestation into the `.workspace` envelope flow, plus `writeBundleFolder` / `readBundleFolder` for disk round-trip. A recipient validates the attestation, unwraps the keys, joins.
 - **Live key delivery log (#9, steady-state)** — `publishDelivery` / `scanDeliveries` over a replicated Hypercore: an admin appends a sealed envelope addressed to a peer who joined *after* creation; that peer scans from a cursor, validates the UCAN against the workspace root, and unwraps. Same `createEnvelope` / `consumeEnvelope` as the bundle.
+- **Topic-layer membership auth (#10)** — `verifyMembership` binds a presented UCAN to the connection's authenticated Noise key, checks revocation, and validates the chain to the workspace root. Wired into the runtime via `CreateRuntimeOptions.auth` (gate replication behind a proof exchange) + `identitySeed` (Noise key == DID). Verified live: members replicate, a wrong-root peer is rejected at connect.
 
 ### Tests
 
-**95 tests green across the three packages**, typecheck clean.
+**103 tests green across the three packages**, typecheck clean.
 
 ### DID identity
 
@@ -97,7 +98,7 @@ On top of the runtime sits the permissions layer (wrap + UCAN + attestation + po
 ## Open work (tracked on the project board)
 
 - ~~**Live key delivery log** ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9))~~ — **implemented**; remaining: scan-efficiency tuning + GC of superseded blocks
-- **Topic-layer authentication** ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) — UCAN check at the noise handshake; the second revocation lever
+- ~~**Topic-layer authentication** ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10))~~ — **implemented**: connection-time membership gate (Noise key bound to DID, UCAN verified to root before replication); remaining: topic rotation on departure
 - **Autobase wrapper** ([#11](https://github.com/workspace-sh/workspace-p2p-spike/issues/11)) + **merge strategy** ([#12](https://github.com/workspace-sh/workspace-p2p-spike/issues/12)) — multi-writer document API
 - **Identity recovery / device linking** ([#17](https://github.com/workspace-sh/workspace-p2p-spike/issues/17))
 - **MLS upgrade-path placeholder** ([#18](https://github.com/workspace-sh/workspace-p2p-spike/issues/18))

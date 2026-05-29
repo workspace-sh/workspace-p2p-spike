@@ -12,11 +12,16 @@ import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { createRequire } from 'node:module';
+
 import Corestore from 'corestore';
 import Hyperswarm from 'hyperswarm';
 import b4a from 'b4a';
+import Protomux from 'protomux';
+import c from 'compact-encoding';
 
 import type {
+  ConnectionAuth,
   CreateRuntimeOptions,
   Did,
   Log,
@@ -24,7 +29,18 @@ import type {
   P2PRuntime,
   TopicId,
 } from './types.ts';
-import { didFromSeed } from './did.ts';
+import { didFromPublicKey } from './did.ts';
+
+const require = createRequire(import.meta.url);
+// hypercore-crypto is a transitive dep of corestore — used to derive the
+// swarm keypair from the corestore primaryKey so the Noise identity and the
+// did:key identity are the same key (see ready()).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const hypercoreCrypto = require('hypercore-crypto') as any;
+
+// How long to wait for a peer's membership proof before dropping a gated
+// connection. Generous — covers a slow handshake, well short of hanging.
+const AUTH_TIMEOUT_MS = 10_000;
 
 // ----------------------------------------------------------------------------
 // Log wrapper around a Hypercore
@@ -94,6 +110,8 @@ export class NodeRuntime implements P2PRuntime {
   private didCache: Did | null = null;
   private opened = false;
   private bootstrap: Array<{ host: string; port: number }> | undefined;
+  private auth: ConnectionAuth | undefined;
+  private identitySeed: Uint8Array | undefined;
 
   constructor(opts: CreateRuntimeOptions = {}) {
     const s = opts.storage;
@@ -104,30 +122,120 @@ export class NodeRuntime implements P2PRuntime {
       this.storagePath = s;
     }
     this.bootstrap = opts.bootstrap;
+    this.auth = opts.auth;
+    if (opts.identitySeed && opts.identitySeed.length !== 32) {
+      throw new Error(`identitySeed must be 32 bytes, got ${opts.identitySeed.length}`);
+    }
+    this.identitySeed = opts.identitySeed;
   }
 
   async ready(): Promise<void> {
     if (this.opened) return;
-    this.store = new Corestore(this.storagePath);
+    // A fixed identitySeed pins the corestore primaryKey (and thus the DID +
+    // swarm keypair); otherwise corestore generates a random primaryKey.
+    // `unsafe: true` acknowledges that we're supplying the primaryKey
+    // ourselves — corestore guards against this by default because reusing a
+    // primary key across unrelated stores can be dangerous. Here it's
+    // deliberate: a fixed identitySeed is how a peer gets a deterministic DID.
+    this.store = this.identitySeed
+      ? new Corestore(this.storagePath, {
+          primaryKey: Buffer.from(this.identitySeed),
+          unsafe: true,
+        })
+      : new Corestore(this.storagePath);
     await this.store.ready();
-    // If bootstrap nodes are configured, Hyperswarm uses them instead of the
-    // public DHT — see CreateRuntimeOptions.bootstrap.
-    this.swarm = this.bootstrap
-      ? new Hyperswarm({ bootstrap: this.bootstrap })
-      : new Hyperswarm();
+
+    // Derive the swarm keypair from the corestore primaryKey so the peer's
+    // Noise static identity IS its did:key identity — the same ed25519 key.
+    // didFromPublicKey(keyPair.publicKey) is identical to the prior
+    // didFromSeed(primaryKey), so the DID value is unchanged; we just stop
+    // letting Hyperswarm generate an unrelated key. This binding is what
+    // makes topic-layer auth sound: a peer's authenticated connection key
+    // matches the DID its membership UCAN is addressed to.
+    const primaryKey = this.store.primaryKey as Uint8Array;
+    const keyPair = hypercoreCrypto.keyPair(Buffer.from(primaryKey)) as {
+      publicKey: Buffer;
+      secretKey: Buffer;
+    };
+
+    this.swarm = new Hyperswarm({
+      keyPair,
+      ...(this.bootstrap ? { bootstrap: this.bootstrap } : {}),
+    });
     this.swarm.on('connection', (conn: unknown) => {
-      // Every incoming connection is paired with a corestore replication stream.
-      // corestore knows which cores the peer wants and responds to gets.
-      this.store.replicate(conn);
+      if (!this.auth) {
+        // Open swarm (default): every connection replicates immediately.
+        this.store.replicate(conn);
+        return;
+      }
+      // Gated: exchange + verify membership proofs before replicating.
+      this._gatedReplicate(conn).catch(() => {
+        try {
+          (conn as { destroy(err?: Error): void }).destroy(new Error('auth failed'));
+        } catch {
+          /* already gone */
+        }
+      });
     });
 
-    // Derive a standards-compliant did:key from the store's ed25519 seed.
-    // didFromSeed uses hypercore-crypto (sodium-universal) to expand the seed
-    // to a public key, then encodes it per the did:key spec (multicodec +
-    // base58btc). The result is a did:key:z6Mk… that ucanto will accept.
-    const pk = this.store.primaryKey as Uint8Array;
-    this.didCache = didFromSeed(pk);
+    this.didCache = didFromPublicKey(keyPair.publicKey);
     this.opened = true;
+  }
+
+  // Gate a connection behind the membership-proof exchange. Opens a dedicated
+  // `workspace/auth@1` channel on the connection's shared Protomux (the same
+  // muxer corestore replicates over), presents our proof, and waits for the
+  // peer's. Replicates only on a positive verdict; drops the connection
+  // otherwise, or on timeout.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async _gatedReplicate(conn: any): Promise<void> {
+    const auth = this.auth!;
+    const mux = Protomux.from(conn);
+
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try {
+        conn.destroy(new Error('membership proof timed out'));
+      } catch {
+        /* already gone */
+      }
+    }, AUTH_TIMEOUT_MS);
+    if (typeof timer.unref === 'function') timer.unref();
+
+    const channel = mux.createChannel({ protocol: 'workspace/auth@1' });
+    if (channel === null) {
+      // A channel for this protocol is already open on the muxer — treat as
+      // a protocol error and drop.
+      clearTimeout(timer);
+      conn.destroy(new Error('auth channel already open'));
+      return;
+    }
+
+    const message = channel.addMessage({
+      encoding: c.raw,
+      onmessage: (remoteProof: Uint8Array) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        Promise.resolve(auth.verify(conn.remotePublicKey as Uint8Array, remoteProof))
+          .then((ok) => {
+            if (ok) this.store.replicate(conn);
+            else conn.destroy(new Error('workspace membership rejected'));
+          })
+          .catch(() => {
+            try {
+              conn.destroy(new Error('membership verify error'));
+            } catch {
+              /* already gone */
+            }
+          });
+      },
+    });
+
+    channel.open();
+    message.send(auth.localProof);
   }
 
   did(): Did {

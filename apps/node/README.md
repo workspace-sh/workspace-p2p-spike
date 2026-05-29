@@ -10,6 +10,7 @@ src/demos/
 ├── end-to-end.ts       ← bundle → topic → log, via live DHT
 ├── acme-org.ts         ← small-org walk-through, direct pipe (no network)
 ├── key-delivery.ts     ← inviting a peer AFTER creation (#9), direct pipe
+├── topic-auth.ts       ← connect-time membership gate (#10), private DHT
 ├── bootstrap-dht.ts    ← private hyperdht bootstrap node
 └── acme-org-live.ts    ← acme-org, but over the private DHT
 ```
@@ -85,6 +86,23 @@ npm -w @workspace/p2p-spike-node run demo:key-delivery
 Direct pipe, no network. Demonstrates `publishDelivery` / `scanDeliveries`
 from `@workspace/portable-bootstrap` composed with `encryptedLog`.
 
+## `demo:topic-auth` — connect-time membership gate (#10)
+
+The second revocation lever: gating who can *connect*, not just who can
+*decrypt*. Each peer runs with an `auth` hook that exchanges membership
+proofs on every connection. Alice + Bob (root-issued UCANs) verify each
+other and replicate; Mallory (a UCAN from a *different* root) reaches the
+topic but fails the gate and replicates nothing.
+
+```sh
+npm -w @workspace/p2p-spike-node run demo:topic-auth
+```
+
+Runs over a real Hyperswarm against a private in-process bootstrap (no
+public DHT). Demonstrates the Noise-key↔DID binding (`identitySeed`), the
+`auth` gate in the runtime, and `verifyMembership` rejecting a wrong-root
+proof at connect time.
+
 ## `demo:bootstrap` + `demo:acme:live` — over a private DHT (host)
 
 > **Default to the containerised version below for iterative work.**
@@ -145,10 +163,9 @@ swarm transport; bare host only when Docker isn't an option.
 
 ## What none of these demos prove (each is its own tracked issue)
 
-- Runtime DID and bundle recipient DID aren't unified through the
-  runtime API yet — the scripts use independent identities for the
-  bundle vs the runtime
-- Topic-layer auth (#10) doesn't gate connections by UCAN today
+- Topic rotation on departure — the membership gate (#10) is in, but
+  rotating the discovery topic alongside K0_org so a revoked peer can't
+  rediscover the swarm is still pending
 - Autobase multi-writer (#11) — the demos use a single-writer log per
   peer; concurrent multi-writer editing with conflict resolution is
   pending. (Transparent block encryption itself is done — `encryptedLog`

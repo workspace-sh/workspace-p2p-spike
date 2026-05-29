@@ -59,3 +59,28 @@ declare module 'b4a' {
   };
   export default b4a;
 }
+
+declare module 'protomux' {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  interface Channel {
+    addMessage(opts: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      encoding?: any;
+      onmessage?: (message: Uint8Array) => void;
+    }): { send(message: Uint8Array): void };
+    open(): void;
+    close(): void;
+  }
+  class Protomux {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    static from(stream: any): Protomux;
+    createChannel(opts: { protocol: string }): Channel | null;
+  }
+  export default Protomux;
+}
+
+declare module 'compact-encoding' {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c: { raw: any; [k: string]: any };
+  export default c;
+}

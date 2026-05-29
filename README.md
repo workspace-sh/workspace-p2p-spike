@@ -136,8 +136,8 @@ npm-only — Bun doesn't compose cleanly with `react-native-macos`.
 | Permissions layer — bootstrap envelopes | implemented |
 | Permissions layer — transparent log encryption (`encryptedLog`) | implemented |
 | Live key delivery log ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)) | implemented (polish pending) |
+| Topic-layer authentication ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) | implemented (topic rotation pending) |
 | `workspace://` URI scheme + `.workspace` format + discovery | designed (specs locked); see [`docs/`](./docs/) |
-| Topic-layer authentication ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) | pending |
 | Autobase wrapper ([#11](https://github.com/workspace-sh/workspace-p2p-spike/issues/11)) | pending |
 | `.workspace` folder + archive shape ([#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24)) | designed; implementation pending |
 | DNS / `.well-known` discovery ([#25](https://github.com/workspace-sh/workspace-p2p-spike/issues/25)) | designed; implementation pending |

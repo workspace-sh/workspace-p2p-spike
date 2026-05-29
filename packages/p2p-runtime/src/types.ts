@@ -60,6 +60,31 @@ export interface P2PRuntime {
   close(): Promise<void>;
 }
 
+/**
+ * Connect-time authentication hook (topic-layer auth, #10).
+ *
+ * When set, the runtime gates replication behind a proof exchange: on each
+ * swarm connection it presents `localProof` to the remote peer and calls
+ * `verify` with the remote's proof. Replication proceeds only if `verify`
+ * returns true; otherwise the connection is dropped.
+ *
+ * The runtime stays UCAN-agnostic — it just moves opaque proof bytes over the
+ * connection and defers the decision to `verify`. The actual membership logic
+ * (bind proof to the authenticated key, validate the UCAN chain to the
+ * workspace root, check revocation) lives in `@workspace/portable-bootstrap`'s
+ * `verifyMembership`, which you wrap into `verify`.
+ */
+export interface ConnectionAuth {
+  /** This peer's membership proof bytes, presented to the remote on connect. */
+  localProof: Uint8Array;
+  /**
+   * Decide whether to accept a connection. `remotePublicKey` is the remote
+   * peer's Noise static key (32-byte ed25519), authenticated by the handshake
+   * — the trust anchor the proof must bind to. Return true to replicate.
+   */
+  verify(remotePublicKey: Uint8Array, remoteProof: Uint8Array): boolean | Promise<boolean>;
+}
+
 /** Options passed to the per-platform factory. */
 export interface CreateRuntimeOptions {
   /**
@@ -83,4 +108,25 @@ export interface CreateRuntimeOptions {
    * LAN / WAN discovery story this fits into.
    */
   bootstrap?: Array<{ host: string; port: number }>;
+
+  /**
+   * 32-byte seed fixing this peer's identity. When set, the corestore
+   * primaryKey and the swarm keypair both derive from it, so the peer's
+   * `did:key` is deterministic and known ahead of `ready()` —
+   * `didFromSeed(identitySeed)`. When unset, corestore generates a random
+   * primaryKey (a fresh identity each run).
+   *
+   * Needed when a caller must know its own DID before the runtime starts —
+   * e.g. to mint a membership proof addressed to it (see `auth`). Also the
+   * seam for persistent identity once the spike grows one.
+   */
+  identitySeed?: Uint8Array;
+
+  /**
+   * Connect-time authentication (topic-layer auth, #10). When set, the
+   * runtime gates replication behind a membership-proof exchange on every
+   * swarm connection. When unset (the default), any peer on the topic can
+   * connect and replicate — the spike's behaviour to date.
+   */
+  auth?: ConnectionAuth;
 }

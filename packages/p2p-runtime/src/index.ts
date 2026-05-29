@@ -8,6 +8,7 @@ export type {
   TopicId,
   LogKey,
   CreateRuntimeOptions,
+  ConnectionAuth,
 } from './types.ts';
 
 // Crypto primitives — exposed because they're independently useful (e.g. to
