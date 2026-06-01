@@ -2,6 +2,7 @@
   "name": "workspace-p2p-spike",
   "private": true,
   "version": "0.0.0",
+  "license": "Apache-2.0",
   "description": "Research spike: evaluate Hypercore as Workspace's P2P data layer across iOS, Android, and macOS.",
   "type": "module",
   "workspaces": [
