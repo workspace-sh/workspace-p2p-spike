@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/p2p-runtime",
+  "name": "@workspace.sh/p2p-runtime",
   "version": "0.0.0",
   "private": true,
   "description": "P2P runtime interface + per-platform implementations. Hypercore + Hyperswarm under the hood.",

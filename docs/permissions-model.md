@@ -8,8 +8,8 @@ underlying cryptographic and protocol choices.
 
 **Status:** design + partial implementation. The wrap primitive, UCAN
 boundary module, root attestation primitive, and bootstrap envelope
-flow are implemented (`@workspace/p2p-runtime`, `@workspace/ucan-boundary`,
-`@workspace/portable-bootstrap`). The live key delivery log (#9),
+flow are implemented (`@workspace.sh/p2p-runtime`, `@workspace.sh/ucan-boundary`,
+`@workspace.sh/portable-bootstrap`). The live key delivery log (#9),
 topic-layer auth at the noise handshake (#10), and the Autobase
 multi-writer wrapper (#11) remain to be built. Tracked in
 [issue #5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5).
@@ -141,7 +141,7 @@ even just dragged into a shared folder), the recipient's app finds
 their envelope locally and unwraps the keys without needing to be
 online with the original sender.
 
-Implemented in `@workspace/portable-bootstrap`. Used when:
+Implemented in `@workspace.sh/portable-bootstrap`. Used when:
 
 - Inviting a new member who is not yet on the swarm
 - Distributing a workspace snapshot via offline channels
@@ -174,7 +174,7 @@ scanners skip records of a `kind` they don't recognise. The `envelope`
 is byte-identical to a bundle envelope — same `createEnvelope` produces
 it, same `consumeEnvelope` validates and unwraps it.
 
-**Implemented** in `@workspace/portable-bootstrap`
+**Implemented** in `@workspace.sh/portable-bootstrap`
 ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)):
 `publishDelivery(log, envelope)` appends; `scanDeliveries(log, {selfDid,
 selfSecretKey, rootDid, fromCursor})` reads from a cursor, returns the
@@ -302,7 +302,7 @@ from encryption-layer access.
   (on the connection's shared Protomux, alongside replication) and calls
   the `verify` hook before replicating. Reject or timeout drops the
   connection.
-- `verifyMembership` (`@workspace/portable-bootstrap`) is the decision:
+- `verifyMembership` (`@workspace.sh/portable-bootstrap`) is the decision:
   it binds the presented UCAN's audience to the authenticated key,
   checks revocation, and validates the chain to the workspace root. A
   sniffed UCAN replayed on another peer's connection fails the audience
@@ -469,7 +469,7 @@ address is never shared with the wider org.
 - Metadata is observable to peers on the same Hyperswarm topic — the
   topic lever closes this post-departure
 - Pre-quantum encryption assumption — the protocol layer is replaceable
-  beneath the `@workspace/p2p-runtime` interface when post-quantum
+  beneath the `@workspace.sh/p2p-runtime` interface when post-quantum
   migration becomes relevant
 
 ---

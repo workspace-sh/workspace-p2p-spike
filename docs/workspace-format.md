@@ -338,7 +338,7 @@ authority still requires an out-of-band channel. See
 [`threat-model.md`](./threat-model.md).
 
 Format mirrors the `SignedAttestation` struct in
-`@workspace/p2p-runtime/src/attestation.ts`:
+`@workspace.sh/p2p-runtime/src/attestation.ts`:
 
 ```json
 {
@@ -746,13 +746,13 @@ out in [`threat-model.md`](./threat-model.md).
 
 Implementation work that materially affects this format:
 
-- **`@workspace/p2p-runtime/src/wrap.ts`** — produces the sealed
+- **`@workspace.sh/p2p-runtime/src/wrap.ts`** — produces the sealed
   bytes that go into `envelopes/` and into per-field encryption.
-- **`@workspace/p2p-runtime/src/attestation.ts`** — produces
+- **`@workspace.sh/p2p-runtime/src/attestation.ts`** — produces
   `attestation.json` and the `.workspace/policy.json` signature.
-- **`@workspace/ucan-boundary`** — issues and validates the UCANs
+- **`@workspace.sh/ucan-boundary`** — issues and validates the UCANs
   inside envelopes.
-- **`@workspace/portable-bootstrap`** — creates and consumes
+- **`@workspace.sh/portable-bootstrap`** — creates and consumes
   bundles; handles the bootstrap envelope flow.
 - **#9** (key delivery log) — the live-log carrier for ongoing
   envelope delivery between connected peers (vs. the in-bundle

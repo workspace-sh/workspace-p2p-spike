@@ -1,9 +1,9 @@
-// Tests for @workspace/ucan-boundary.
+// Tests for @workspace.sh/ucan-boundary.
 //
 // Covers the regression matrix called out in docs/ucan-prior-research.md:
 // basic delegation, sub-delegation, canIssue override (the gotcha), expiry,
 // whole-second floor (the other gotcha), wrong-recipient detection,
-// serialisation round-trip, and DID parity with @workspace/p2p-runtime.
+// serialisation round-trip, and DID parity with @workspace.sh/p2p-runtime.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -245,7 +245,7 @@ test('serialisation: toBytes → fromBytes preserves validity and metadata', asy
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 8 — DID parity with @workspace/p2p-runtime
+// Scenario 8 — DID parity with @workspace.sh/p2p-runtime
 // ---------------------------------------------------------------------------
 
 test('DID parity: principalFromSeed produces a stable did:key for a known seed', async () => {

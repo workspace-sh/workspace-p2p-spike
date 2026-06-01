@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-import { principalFromSeed } from '@workspace/ucan-boundary';
+import { principalFromSeed } from '@workspace.sh/ucan-boundary';
 import {
   createEnvelope,
   createMembershipProof,

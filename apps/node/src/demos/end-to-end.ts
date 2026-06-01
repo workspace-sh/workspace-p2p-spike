@@ -42,15 +42,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
-import { createRuntime } from '@workspace/p2p-runtime/node';
-import { principalFromSeed } from '@workspace/ucan-boundary';
+import { createRuntime } from '@workspace.sh/p2p-runtime/node';
+import { principalFromSeed } from '@workspace.sh/ucan-boundary';
 import {
   createBundle,
   consumeBundle,
   writeBundleFolder,
   readBundleFolder,
   type CapabilityDescriptor,
-} from '@workspace/portable-bootstrap';
+} from '@workspace.sh/portable-bootstrap';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,4 +1,4 @@
-// Public types for @workspace/p2p-runtime.
+// Public types for @workspace.sh/p2p-runtime.
 //
 // Deliberately minimal. The whole point of the interface is that the consuming
 // app shouldn't need to know whether it's talking to a Bare worklet (mobile),
@@ -71,7 +71,7 @@ export interface P2PRuntime {
  * The runtime stays UCAN-agnostic — it just moves opaque proof bytes over the
  * connection and defers the decision to `verify`. The actual membership logic
  * (bind proof to the authenticated key, validate the UCAN chain to the
- * workspace root, check revocation) lives in `@workspace/portable-bootstrap`'s
+ * workspace root, check revocation) lives in `@workspace.sh/portable-bootstrap`'s
  * `verifyMembership`, which you wrap into `verify`.
  */
 export interface ConnectionAuth {

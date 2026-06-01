@@ -1,4 +1,4 @@
-# @workspace/p2p-spike-node
+# @workspace.sh/p2p-spike-node
 
 Scripts for exercising the spike. Several cover the design end-to-end
 on direct pipes (no network); others exercise the swarm transport (over
@@ -11,7 +11,7 @@ src/demos/
 ├── acme-org.ts         ← small-org walk-through, direct pipe (no network)
 ├── key-delivery.ts     ← inviting a peer AFTER creation (#9), direct pipe
 ├── topic-auth.ts       ← connect-time membership gate (#10), private DHT
-├── workspace-sdk.ts    ← the whole flow via @workspace/workspace, private DHT
+├── workspace-sdk.ts    ← the whole flow via @workspace.sh/workspace, private DHT
 ├── bootstrap-dht.ts    ← private hyperdht bootstrap node
 └── acme-org-live.ts    ← acme-org, but over the private DHT
 ```
@@ -30,7 +30,7 @@ Hyperswarm swarm. The unit test at
 replication code path via a direct duplex pipe — no network.
 
 ```sh
-npm -w @workspace/p2p-spike-node run smoke
+npm -w @workspace.sh/p2p-spike-node run smoke
 ```
 
 Requires internet access. Flaky if the public DHT is slow or your
@@ -49,7 +49,7 @@ The first cohesive walk-through of the design, over the real swarm:
 6. Peer B opens the log and reads it back via Hyperswarm
 
 ```sh
-npm -w @workspace/p2p-spike-node run demo:end-to-end
+npm -w @workspace.sh/p2p-spike-node run demo:end-to-end
 ```
 
 Same network caveat as `smoke`.
@@ -63,7 +63,7 @@ K0_org**. Bob and Carol unwrap K0_org from their envelopes and
 decrypt; Eve (no envelope) cannot.
 
 ```sh
-npm -w @workspace/p2p-spike-node run demo:acme
+npm -w @workspace.sh/p2p-spike-node run demo:acme
 ```
 
 Uses the runtime's direct duplex pipe rather than the swarm. Same
@@ -81,11 +81,11 @@ K0_org, and then decrypts actual workspace content with it — without
 re-cutting any bundle or touching anyone else's keys.
 
 ```sh
-npm -w @workspace/p2p-spike-node run demo:key-delivery
+npm -w @workspace.sh/p2p-spike-node run demo:key-delivery
 ```
 
 Direct pipe, no network. Demonstrates `publishDelivery` / `scanDeliveries`
-from `@workspace/portable-bootstrap` composed with `encryptedLog`.
+from `@workspace.sh/portable-bootstrap` composed with `encryptedLog`.
 
 ## `demo:topic-auth` — connect-time membership gate (#10)
 
@@ -96,7 +96,7 @@ other and replicate; Mallory (a UCAN from a *different* root) reaches the
 topic but fails the gate and replicates nothing.
 
 ```sh
-npm -w @workspace/p2p-spike-node run demo:topic-auth
+npm -w @workspace.sh/p2p-spike-node run demo:topic-auth
 ```
 
 Runs over a real Hyperswarm against a private in-process bootstrap (no
@@ -106,13 +106,13 @@ proof at connect time.
 
 ## `demo:workspace` — the SDK facade end-to-end
 
-The whole Acme flow via `@workspace/workspace`: `Workspace.create` →
+The whole Acme flow via `@workspace.sh/workspace`: `Workspace.create` →
 `invite` → `write`; then `Workspace.open` on a second peer →
 replicate → `entries`. Same outcome as `demo:acme:live` but ~10 lines
 instead of ~200 — the surface the app is actually built against.
 
 ```sh
-npm -w @workspace/p2p-spike-node run demo:workspace
+npm -w @workspace.sh/p2p-spike-node run demo:workspace
 ```
 
 Real Hyperswarm, private in-process bootstrap. Eve (uninvited) is
@@ -130,10 +130,10 @@ instead of the public DHT.
 
 ```sh
 # Terminal 1 — start the private DHT (listens on 127.0.0.1:49737)
-npm -w @workspace/p2p-spike-node run demo:bootstrap
+npm -w @workspace.sh/p2p-spike-node run demo:bootstrap
 
 # Terminal 2 — run the Acme demo against it
-npm -w @workspace/p2p-spike-node run demo:acme:live
+npm -w @workspace.sh/p2p-spike-node run demo:acme:live
 ```
 
 The runtime accepts a `bootstrap` option (see

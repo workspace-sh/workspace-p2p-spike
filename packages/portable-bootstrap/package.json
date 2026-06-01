@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/portable-bootstrap",
+  "name": "@workspace.sh/portable-bootstrap",
   "version": "0.0.0",
   "private": true,
   "description": "Bundles a Workspace as a portable folder/archive — manifest, root attestation, and per-recipient bootstrap envelopes. The offline / first-contact carrier for permissions delivery.",
@@ -20,8 +20,8 @@
     "node": ">=22.6"
   },
   "dependencies": {
-    "@workspace/p2p-runtime": "*",
-    "@workspace/ucan-boundary": "*"
+    "@workspace.sh/p2p-runtime": "*",
+    "@workspace.sh/ucan-boundary": "*"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

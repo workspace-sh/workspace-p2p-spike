@@ -69,7 +69,7 @@ duplex pipe. No network, no external dependencies.
 ### 2. Run the small-org demo (still no network)
 
 ```sh
-npm -w @workspace/p2p-spike-node run demo:acme
+npm -w @workspace.sh/p2p-spike-node run demo:acme
 ```
 
 Three "Acme" members — Alice, Bob, Carol — share a workspace. Alice
@@ -109,12 +109,12 @@ identically with the same compose file.
 
 ### Building against the SDK
 
-The app codes against `@workspace/workspace` — one object over the
+The app codes against `@workspace.sh/workspace` — one object over the
 proven primitives:
 
 ```ts
-import { createRuntime } from '@workspace/p2p-runtime/node';
-import { Workspace } from '@workspace/workspace';
+import { createRuntime } from '@workspace.sh/p2p-runtime/node';
+import { Workspace } from '@workspace.sh/workspace';
 
 const ws = await Workspace.create({ createRuntime, folder: 'Acme.workspace', name: 'Acme' });
 await ws.invite(bobDid);
@@ -125,19 +125,19 @@ ws.on('change', render);
 const ws2 = await Workspace.open({ createRuntime, folder: 'Acme.workspace', identitySeed });
 ```
 
-`npm -w @workspace/p2p-spike-node run demo:workspace` runs this
+`npm -w @workspace.sh/p2p-spike-node run demo:workspace` runs this
 end-to-end over a private swarm — the same flow as the hand-wired
 `acme-org-live` demo, in ~10 lines.
 
 ### Other test paths
 
-- `npm -w @workspace/p2p-spike-node run smoke` — verifies the live
+- `npm -w @workspace.sh/p2p-spike-node run smoke` — verifies the live
   Hyperswarm DHT works (needs internet)
-- `npm -w @workspace/p2p-spike-node run demo:end-to-end` — bundle +
+- `npm -w @workspace.sh/p2p-spike-node run demo:end-to-end` — bundle +
   topic + replication over the live public DHT
-- `npm -w @workspace/p2p-spike-node run demo:bootstrap` +
+- `npm -w @workspace.sh/p2p-spike-node run demo:bootstrap` +
   `demo:acme:live` — same as the container demo but on the bare host
-- `npm -w @workspace/p2p-spike-node run demo:key-delivery` /
+- `npm -w @workspace.sh/p2p-spike-node run demo:key-delivery` /
   `demo:topic-auth` — the #9 / #10 flows in isolation
 
 See [`apps/node/README.md`](./apps/node/README.md) for the full
@@ -159,7 +159,7 @@ npm-only — Bun doesn't compose cleanly with `react-native-macos`.
 | Permissions layer — root attestation | implemented |
 | Permissions layer — bootstrap envelopes | implemented |
 | Permissions layer — transparent log encryption (`encryptedLog`) | implemented |
-| Workspace SDK facade (`@workspace/workspace`) | v1 implemented (single-writer; Autobase + doc model pending) |
+| Workspace SDK facade (`@workspace.sh/workspace`) | v1 implemented (single-writer; Autobase + doc model pending) |
 | Live key delivery log ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)) | implemented (polish pending) |
 | Topic-layer authentication ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) | implemented (topic rotation pending) |
 | `workspace://` URI scheme + `.workspace` format + discovery | designed (specs locked); see [`docs/`](./docs/) |
@@ -182,13 +182,13 @@ Active development on [`feat/permissions-layer`](https://github.com/workspace-sh
 ┌─────────────────────────────────────────────────────────────────────┐
 │  .workspace folder / workspace:// URI                               │  ← Portable / discoverable
 ├─────────────────────────────────────────────────────────────────────┤
-│  Bootstrap envelopes + bundled manifest + root attestation          │  ← @workspace/portable-bootstrap
+│  Bootstrap envelopes + bundled manifest + root attestation          │  ← @workspace.sh/portable-bootstrap
 ├─────────────────────────────────────────────────────────────────────┤
-│  UCAN delegations (issue, validate, serialise, canIssue override)   │  ← @workspace/ucan-boundary
+│  UCAN delegations (issue, validate, serialise, canIssue override)   │  ← @workspace.sh/ucan-boundary
 ├─────────────────────────────────────────────────────────────────────┤
-│  Wrap primitive + root attestation + did:key encode/decode          │  ← @workspace/p2p-runtime (crypto)
+│  Wrap primitive + root attestation + did:key encode/decode          │  ← @workspace.sh/p2p-runtime (crypto)
 ├─────────────────────────────────────────────────────────────────────┤
-│  Hypercore logs + Hyperswarm topics + NSTask IPC                    │  ← @workspace/p2p-runtime (sync)
+│  Hypercore logs + Hyperswarm topics + NSTask IPC                    │  ← @workspace.sh/p2p-runtime (sync)
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -216,22 +216,22 @@ workspace was distributed.
 │   ├── risks.md                         ← where this could fail and what we're doing
 │   └── ucan-prior-research.md           ← UCAN library notes from earlier spike
 ├── packages/
-│   ├── p2p-runtime/                     ← @workspace/p2p-runtime
+│   ├── p2p-runtime/                     ← @workspace.sh/p2p-runtime
 │   │   └── src/
 │   │       ├── types.ts                 ← P2PRuntime, Log, Did, TopicId, LogKey
 │   │       ├── runtime.{node,ios,android,macos,web,windows}.ts
 │   │       ├── did.ts                   ← did:key encode/decode (ed25519)
 │   │       ├── wrap.ts                  ← X25519 ECDH sealed envelopes
 │   │       └── attestation.ts           ← root attestation sign/verify
-│   ├── ucan-boundary/                   ← @workspace/ucan-boundary
+│   ├── ucan-boundary/                   ← @workspace.sh/ucan-boundary
 │   │   └── src/index.ts                 ← every ucanto call lives here
-│   ├── portable-bootstrap/              ← @workspace/portable-bootstrap
+│   ├── portable-bootstrap/              ← @workspace.sh/portable-bootstrap
 │   │   └── src/
 │   │       ├── index.ts                 ← createBundle / consumeBundle / createEnvelope
 │   │       ├── folder.ts                ← writeBundleFolder / readBundleFolder
 │   │       ├── key-delivery.ts          ← publishDelivery / scanDeliveries (#9)
 │   │       └── membership.ts            ← verifyMembership (#10)
-│   └── workspace/                       ← @workspace/workspace (app-facing SDK)
+│   └── workspace/                       ← @workspace.sh/workspace (app-facing SDK)
 │       └── src/index.ts                 ← Workspace.create / open / invite / write
 └── apps/
     ├── node/                            ← smoke harness over real Hyperswarm

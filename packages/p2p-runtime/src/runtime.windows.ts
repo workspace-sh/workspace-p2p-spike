@@ -15,7 +15,7 @@ import type { CreateRuntimeOptions, P2PRuntime } from './types.ts';
 
 export async function createRuntime(_opts: CreateRuntimeOptions = {}): Promise<P2PRuntime> {
   throw new Error(
-    '[@workspace/p2p-runtime/windows] not investigated — out of scope for the current spike (PLAN.md). ' +
+    '[@workspace.sh/p2p-runtime/windows] not investigated — out of scope for the current spike (PLAN.md). ' +
       'Likely shape: RN-Windows TurboModule + spawned Node child + named pipe IPC.',
   );
 }

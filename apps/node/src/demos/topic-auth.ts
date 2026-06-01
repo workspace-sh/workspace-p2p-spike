@@ -19,15 +19,15 @@
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
-import { createRuntime } from '@workspace/p2p-runtime/node';
-import { didFromSeed, type ConnectionAuth, type Did } from '@workspace/p2p-runtime';
-import { principalFromSeed } from '@workspace/ucan-boundary';
+import { createRuntime } from '@workspace.sh/p2p-runtime/node';
+import { didFromSeed, type ConnectionAuth, type Did } from '@workspace.sh/p2p-runtime';
+import { principalFromSeed } from '@workspace.sh/ucan-boundary';
 import {
   createEnvelope,
   verifyMembership,
   type CapabilityDescriptor,
   type Principal,
-} from '@workspace/portable-bootstrap';
+} from '@workspace.sh/portable-bootstrap';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

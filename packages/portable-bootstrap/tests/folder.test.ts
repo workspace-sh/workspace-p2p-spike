@@ -11,7 +11,7 @@ import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { principalFromSeed } from '@workspace/ucan-boundary';
+import { principalFromSeed } from '@workspace.sh/ucan-boundary';
 import {
   createBundle,
   consumeBundle,

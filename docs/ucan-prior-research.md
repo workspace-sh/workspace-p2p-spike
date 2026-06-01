@@ -1,6 +1,6 @@
 # UCAN + Hypercore Prior Research (April 2026)
 
-Notes from a parallel UCAN+Hypercore exploration that ran before the current permissions-layer work. Preserved for context — the library comparison, the `canIssue` gotcha, the boundary-module pattern, and the 10-scenario test matrix continue to inform implementation choices in `@workspace/ucan-boundary`.
+Notes from a parallel UCAN+Hypercore exploration that ran before the current permissions-layer work. Preserved for context — the library comparison, the `canIssue` gotcha, the boundary-module pattern, and the 10-scenario test matrix continue to inform implementation choices in `@workspace.sh/ucan-boundary`.
 
 The exploration built three in-process peer nodes, gave them ed25519 / did:key identities, used [@ucanto/core](https://www.npmjs.com/package/@ucanto/core) for capability minting + chain validation, and ran a 10-scenario integration test covering role grants, sub-delegation, revocation cascade, and expiry. **All 10 scenarios passed.**
 
@@ -46,7 +46,7 @@ For a real Workspace integration the choice is between **(a) ship faster on ucan
 ## what to do when this thread resumes
 
 1. **Pick a UCAN library deliberately**, in light of where iso-ucan's revocation story has landed by then. If still no revocation module: ucanto.
-2. **Write a boundary module first** (`@workspace/ucan-boundary` or similar, single file, every UCAN call lives there). The spike's experience was that confining ucanto to one file made the design clearer and the future swap viable.
+2. **Write a boundary module first** (`@workspace.sh/ucan-boundary` or similar, single file, every UCAN call lives there). The spike's experience was that confining ucanto to one file made the design clearer and the future swap viable.
 3. **Use Autobase, not per-peer feeds.** Skip the spike's last-writer-wins shortcut.
 4. **Implement the root attestation.** Don't ship trust-on-first-use.
 5. **Run the same 10 scenarios** as a regression suite.

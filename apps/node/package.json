@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/p2p-spike-node",
+  "name": "@workspace.sh/p2p-spike-node",
   "version": "0.0.0",
   "private": true,
   "description": "Standalone smoke harness: two NodeRuntime instances find each other via real Hyperswarm and replicate a log.",
@@ -15,10 +15,10 @@
     "demo:acme:live": "node --experimental-strip-types --no-warnings src/demos/acme-org-live.ts"
   },
   "dependencies": {
-    "@workspace/p2p-runtime": "*",
-    "@workspace/portable-bootstrap": "*",
-    "@workspace/ucan-boundary": "*",
-    "@workspace/workspace": "*"
+    "@workspace.sh/p2p-runtime": "*",
+    "@workspace.sh/portable-bootstrap": "*",
+    "@workspace.sh/ucan-boundary": "*",
+    "@workspace.sh/workspace": "*"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

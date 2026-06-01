@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/ucan-boundary",
+  "name": "@workspace.sh/ucan-boundary",
   "version": "0.0.0",
   "private": true,
   "description": "Single-file boundary module isolating every ucanto call. Issues, validates, serialises, and decodes UCAN delegations for the permissions model.",

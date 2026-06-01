@@ -197,7 +197,7 @@ API stabilises differently.
 ucanto for v1, because **revocation is load-bearing** for our
 permission model and ucanto has a working revocation hook today.
 The boundary module pattern
-(`@workspace/ucan-boundary`, see PR #22) confines every ucanto call
+(`@workspace.sh/ucan-boundary`, see PR #22) confines every ucanto call
 to one file. A future swap is a 1–2 day job for the imports plus a
 capability-model rewrite. We track the spec; we revisit when
 iso-ucan ships revocation or when wire-format interop becomes

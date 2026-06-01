@@ -14,10 +14,10 @@ import type { CreateRuntimeOptions, P2PRuntime } from './types.ts';
 
 export async function createRuntime(_opts: CreateRuntimeOptions = {}): Promise<P2PRuntime> {
   throw new Error(
-    '[@workspace/p2p-runtime] no platform implementation matched. ' +
+    '[@workspace.sh/p2p-runtime] no platform implementation matched. ' +
       'Configure your bundler to pick runtime.<platform>.ts ' +
       '(Metro: rely on platform extensions; Vite: alias or conditions). ' +
-      'For plain Node, import directly from "@workspace/p2p-runtime/node".',
+      'For plain Node, import directly from "@workspace.sh/p2p-runtime/node".',
   );
 }
 

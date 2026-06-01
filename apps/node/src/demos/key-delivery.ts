@@ -18,15 +18,15 @@
 
 import { createRequire } from 'node:module';
 
-import { NodeRuntime } from '@workspace/p2p-runtime/node';
-import { encryptedLog } from '@workspace/p2p-runtime';
-import { principalFromSeed } from '@workspace/ucan-boundary';
+import { NodeRuntime } from '@workspace.sh/p2p-runtime/node';
+import { encryptedLog } from '@workspace.sh/p2p-runtime';
+import { principalFromSeed } from '@workspace.sh/ucan-boundary';
 import {
   createEnvelope,
   publishDelivery,
   scanDeliveries,
   type CapabilityDescriptor,
-} from '@workspace/portable-bootstrap';
+} from '@workspace.sh/portable-bootstrap';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

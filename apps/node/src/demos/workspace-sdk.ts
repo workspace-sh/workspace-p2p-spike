@@ -15,9 +15,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
-import { createRuntime } from '@workspace/p2p-runtime/node';
-import { didFromSeed } from '@workspace/p2p-runtime';
-import { Workspace } from '@workspace/workspace';
+import { createRuntime } from '@workspace.sh/p2p-runtime/node';
+import { didFromSeed } from '@workspace.sh/p2p-runtime';
+import { Workspace } from '@workspace.sh/workspace';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

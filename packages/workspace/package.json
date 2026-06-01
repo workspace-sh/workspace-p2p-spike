@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/workspace",
+  "name": "@workspace.sh/workspace",
   "version": "0.0.0",
   "private": true,
   "description": "App-facing Workspace SDK. One object composing the proven primitives — create/open a workspace, invite members, read/write the encrypted log — so the app codes against a single surface instead of wiring crypto by hand.",
@@ -24,9 +24,9 @@
     "node": ">=22.6"
   },
   "dependencies": {
-    "@workspace/p2p-runtime": "*",
-    "@workspace/portable-bootstrap": "*",
-    "@workspace/ucan-boundary": "*"
+    "@workspace.sh/p2p-runtime": "*",
+    "@workspace.sh/portable-bootstrap": "*",
+    "@workspace.sh/ucan-boundary": "*"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

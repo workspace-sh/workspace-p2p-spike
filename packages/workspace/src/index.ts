@@ -1,4 +1,4 @@
-// @workspace/workspace — the app-facing Workspace SDK.
+// @workspace.sh/workspace — the app-facing Workspace SDK.
 //
 // One object that composes the proven primitives (runtime + bundle +
 // envelopes + encrypted log + membership gate) so the app codes against a
@@ -13,7 +13,7 @@
 //   const ws2 = await Workspace.open({ createRuntime, folder, identitySeed });
 //
 // Platform-agnostic by design: it never imports a platform runtime. The
-// caller injects `createRuntime` (from `@workspace/p2p-runtime/node`, or a
+// caller injects `createRuntime` (from `@workspace.sh/p2p-runtime/node`, or a
 // test double). That keeps this package free of native deps and unit-testable.
 //
 // v1 scope: single-writer data log under K0_org, membership gate auto-wired,
@@ -31,8 +31,8 @@ import {
   type Log,
   type Did,
   type CreateRuntimeOptions,
-} from '@workspace/p2p-runtime';
-import { principalFromSeed, type Principal, type CapabilityDescriptor } from '@workspace/ucan-boundary';
+} from '@workspace.sh/p2p-runtime';
+import { principalFromSeed, type Principal, type CapabilityDescriptor } from '@workspace.sh/ucan-boundary';
 import {
   createBundle,
   consumeBundle,
@@ -43,7 +43,7 @@ import {
   verifyMembership,
   type Bundle,
   type Manifest,
-} from '@workspace/portable-bootstrap';
+} from '@workspace.sh/portable-bootstrap';
 
 /** A factory that builds a platform runtime — inject from the platform package. */
 export type RuntimeFactory = (opts: CreateRuntimeOptions) => Promise<P2PRuntime>;
@@ -51,7 +51,7 @@ export type RuntimeFactory = (opts: CreateRuntimeOptions) => Promise<P2PRuntime>
 type Bootstrap = Array<{ host: string; port: number }>;
 
 export interface WorkspaceCreateOptions {
-  /** Platform runtime factory, e.g. `createRuntime` from `@workspace/p2p-runtime/node`. */
+  /** Platform runtime factory, e.g. `createRuntime` from `@workspace.sh/p2p-runtime/node`. */
   createRuntime: RuntimeFactory;
   /** Path to the `.workspace` folder to create. */
   folder: string;

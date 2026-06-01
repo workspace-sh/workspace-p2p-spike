@@ -25,7 +25,7 @@ Bonus: Hypercore's append events crossed the NSTask boundary unprompted. The "ze
 
 ## What was built (implemented, in PR #22)
 
-### `@workspace/p2p-runtime` crypto additions
+### `@workspace.sh/p2p-runtime` crypto additions
 
 - `wrap.ts` — X25519 ECDH sealed envelopes for symmetric key delivery
 - `seal.ts` — XSalsa20-Poly1305 symmetric AEAD (`seal` / `open`) for content under a workspace/tier key
@@ -33,11 +33,11 @@ Bonus: Hypercore's append events crossed the NSTask boundary unprompted. The "ze
 - `attestation.ts` — root attestation sign/verify (ed25519)
 - `did.ts` extensions — `did:key:z6Mk…` encode + decode (bidirectional)
 
-### `@workspace/ucan-boundary`
+### `@workspace.sh/ucan-boundary`
 
 UCAN delegation boundary module — every ucanto call confined to one file so a future library swap stays a small change. Surface: `issueDelegation`, `validateDelegation` (with the `canIssue` override for `workspace://` URIs), `toBytes` / `fromBytes` for transport, `WHOLE_SECOND_FLOOR` named constant for the expiry gotcha.
 
-### `@workspace/portable-bootstrap`
+### `@workspace.sh/portable-bootstrap`
 
 Two-carrier permissions delivery, sharing one envelope atom:
 
@@ -45,7 +45,7 @@ Two-carrier permissions delivery, sharing one envelope atom:
 - **Live key delivery log (#9, steady-state)** — `publishDelivery` / `scanDeliveries` over a replicated Hypercore: an admin appends a sealed envelope addressed to a peer who joined *after* creation; that peer scans from a cursor, validates the UCAN against the workspace root, and unwraps. Same `createEnvelope` / `consumeEnvelope` as the bundle.
 - **Topic-layer membership auth (#10)** — `verifyMembership` binds a presented UCAN to the connection's authenticated Noise key, checks revocation, and validates the chain to the workspace root. Wired into the runtime via `CreateRuntimeOptions.auth` (gate replication behind a proof exchange) + `identitySeed` (Noise key == DID). Verified live: members replicate, a wrong-root peer is rejected at connect.
 
-### `@workspace/workspace` — app-facing SDK facade
+### `@workspace.sh/workspace` — app-facing SDK facade
 
 The surface the Workspace app is built against. One object composes everything: `Workspace.create` (identity, K0_org, logs, bundle, topic, auth gate — one call), `.open` (attestation + envelope + K0_org recovery + gate + replication), `.invite` (sealed envelope to both carriers), `.write` / `.entries` (transparent encrypted log), `.on('change')`. Platform-agnostic — the runtime is injected, so the package is native-dep-free and unit-testable. v1 is single-writer; Autobase multi-writer (#11), the document/section model, and `workspace://` join are deferred behind the same API. The `demo:workspace` runs the Acme flow end-to-end over a private swarm in ~10 lines (vs ~200 hand-wired).
 
@@ -85,7 +85,7 @@ The consumer-facing view of the permissions model lives in [`table-file-format/d
 
 ```
 React Native JS
-  └── @workspace/p2p-runtime (runtime.macos.ts)
+  └── @workspace.sh/p2p-runtime (runtime.macos.ts)
         └── SpawnedRuntime  ←  MacOSTransport
                                   └── P2PRuntimeModule (Obj-C++ TurboModule)
                                         └── NSTask → node child-bin.ts
@@ -126,9 +126,9 @@ Project board: https://github.com/orgs/workspace-sh/projects/6
 
 ## Extraction checklist (main monorepo)
 
-1. Copy `packages/p2p-runtime` → Workspace monorepo as `@workspace/p2p-runtime`.
-2. Copy `packages/ucan-boundary` → `@workspace/ucan-boundary`.
-3. Copy `packages/portable-bootstrap` → `@workspace/portable-bootstrap`.
+1. Copy `packages/p2p-runtime` → Workspace monorepo as `@workspace.sh/p2p-runtime`.
+2. Copy `packages/ucan-boundary` → `@workspace.sh/ucan-boundary`.
+3. Copy `packages/portable-bootstrap` → `@workspace.sh/portable-bootstrap`.
 4. Add `apps/macos/native/P2PRuntimeModule.h` + `.mm` to the macOS Xcode target.
 5. Wire `runtime.macos.ts` export in the package — Metro resolves `.macos.ts` automatically.
 6. Set `childScriptPath` + `nodeBin` in the macOS app bootstrap.

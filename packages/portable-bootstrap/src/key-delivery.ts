@@ -20,7 +20,7 @@
 //
 // See docs/permissions-model.md ("The two carriers") for the design.
 
-import type { Log, Did } from '@workspace/p2p-runtime';
+import type { Log, Did } from '@workspace.sh/p2p-runtime';
 
 import {
   consumeEnvelope,

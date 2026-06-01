@@ -13,7 +13,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { didFromSeed, type CreateRuntimeOptions, type Log, type LogKey, type P2PRuntime, type Did } from '@workspace/p2p-runtime';
+import { didFromSeed, type CreateRuntimeOptions, type Log, type LogKey, type P2PRuntime, type Did } from '@workspace.sh/p2p-runtime';
 import { Workspace } from '../src/index.ts';
 
 const enc = new TextEncoder();

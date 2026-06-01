@@ -9,8 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-import { principalFromSeed } from '@workspace/ucan-boundary';
-import type { Log, LogKey } from '@workspace/p2p-runtime';
+import { principalFromSeed } from '@workspace.sh/ucan-boundary';
+import type { Log, LogKey } from '@workspace.sh/p2p-runtime';
 import {
   createEnvelope,
   publishDelivery,
@@ -23,7 +23,7 @@ import {
 // would drag its untyped native deps (corestore/hyperswarm/b4a) into this
 // package's typecheck. These unit tests cover the publish/scan/cursor/skip
 // logic against an in-memory Log; the Log interface's replication behaviour
-// is proven in @workspace/p2p-runtime's own tests.
+// is proven in @workspace.sh/p2p-runtime's own tests.
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

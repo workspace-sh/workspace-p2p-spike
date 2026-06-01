@@ -1,4 +1,4 @@
-// Node implementation of @workspace/p2p-runtime.
+// Node implementation of @workspace.sh/p2p-runtime.
 //
 // Used directly by:
 //   - the apps/node smoke harness (Phase 1 of PLAN.md)

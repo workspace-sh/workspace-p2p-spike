@@ -10,7 +10,7 @@
 // the same Hypercore replication path as everything else: the bytes on the
 // wire and at rest are ciphertext; only a holder of the key projects them
 // back to plaintext. The key is delivered out-of-band via the bundle
-// envelope flow (see @workspace/portable-bootstrap) or the live key delivery
+// envelope flow (see @workspace.sh/portable-bootstrap) or the live key delivery
 // log.
 //
 // Composition, not modification: this wraps the platform Log rather than

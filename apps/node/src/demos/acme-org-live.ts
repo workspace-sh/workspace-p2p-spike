@@ -7,8 +7,8 @@
 // machine.
 //
 // Run order:
-//   Terminal 1:  npm -w @workspace/p2p-spike-node run demo:bootstrap
-//   Terminal 2:  npm -w @workspace/p2p-spike-node run demo:acme:live
+//   Terminal 1:  npm -w @workspace.sh/p2p-spike-node run demo:bootstrap
+//   Terminal 2:  npm -w @workspace.sh/p2p-spike-node run demo:acme:live
 //
 // See docs/discovery-layers.md for why we do this (and how it relates to
 // the layered local / LAN / WAN discovery story).
@@ -19,16 +19,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
-import { createRuntime } from '@workspace/p2p-runtime/node';
-import { encryptedLog } from '@workspace/p2p-runtime';
-import { principalFromSeed } from '@workspace/ucan-boundary';
+import { createRuntime } from '@workspace.sh/p2p-runtime/node';
+import { encryptedLog } from '@workspace.sh/p2p-runtime';
+import { principalFromSeed } from '@workspace.sh/ucan-boundary';
 import {
   createBundle,
   consumeBundle,
   writeBundleFolder,
   readBundleFolder,
   type CapabilityDescriptor,
-} from '@workspace/portable-bootstrap';
+} from '@workspace.sh/portable-bootstrap';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

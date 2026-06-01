@@ -1,4 +1,4 @@
-// @workspace/portable-bootstrap
+// @workspace.sh/portable-bootstrap
 //
 // Bundles a Workspace as a portable folder (or archive of one) carrying:
 //   - a manifest binding workspaceId + createdAt + rootDid
@@ -25,7 +25,7 @@ import {
   type Did,
   type SignedAttestation,
   type AttestationPayload,
-} from '@workspace/p2p-runtime';
+} from '@workspace.sh/p2p-runtime';
 import {
   issueDelegation,
   validateDelegation,
@@ -36,7 +36,7 @@ import {
   type DelegationToken,
   type RootForResource,
   type CapabilityDescriptor,
-} from '@workspace/ucan-boundary';
+} from '@workspace.sh/ucan-boundary';
 
 // ---------------------------------------------------------------------------
 // Manifest
@@ -448,9 +448,9 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 // Convenience re-exports so callers don't need to import basic types from
-// @workspace/ucan-boundary directly when starting a bundle workflow.
+// @workspace.sh/ucan-boundary directly when starting a bundle workflow.
 export { principalFromSeed };
-export type { CapabilityDescriptor, DelegationToken, Principal } from '@workspace/ucan-boundary';
+export type { CapabilityDescriptor, DelegationToken, Principal } from '@workspace.sh/ucan-boundary';
 
 // Filesystem pack/unpack — write a bundle to a `.workspace/` folder layout
 // per docs/workspace-format.md and read it back.

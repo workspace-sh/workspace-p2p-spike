@@ -1,4 +1,4 @@
-// @workspace/ucan-boundary
+// @workspace.sh/ucan-boundary
 //
 // Single-file boundary module isolating every ucanto call. Other packages
 // import from here, not from @ucanto/* — so a future swap (e.g. to iso-ucan
@@ -100,7 +100,7 @@ export async function generatePrincipal(): Promise<Principal> {
 /**
  * Derive a principal from a 32-byte ed25519 seed.
  *
- * Same seed as @workspace/p2p-runtime's `didFromSeed` produces the same DID,
+ * Same seed as @workspace.sh/p2p-runtime's `didFromSeed` produces the same DID,
  * so a Hypercore peer and its UCAN identity coincide.
  */
 export async function principalFromSeed(seed: Uint8Array): Promise<Principal> {
@@ -121,7 +121,7 @@ function wrap(signer: any): Principal {
 }
 
 // ---------------------------------------------------------------------------
-// DID decode — inverse of @workspace/p2p-runtime's didFromSeed
+// DID decode — inverse of @workspace.sh/p2p-runtime's didFromSeed
 // ---------------------------------------------------------------------------
 
 /** Convenience: extract the DID from a principal. */
@@ -132,7 +132,7 @@ export function didOf(p: Principal): Did {
 /**
  * Decode a `did:key:z6Mk…` to its underlying 32-byte ed25519 public key.
  *
- * Inverse of @workspace/p2p-runtime/did.ts's `didFromSeed`. Used by callers
+ * Inverse of @workspace.sh/p2p-runtime/did.ts's `didFromSeed`. Used by callers
  * who need the recipient's raw public key (e.g. to wrap a symmetric key with
  * the wrap.ts primitive).
  */
@@ -141,7 +141,7 @@ export function didToPublicKey(did: Did): Uint8Array {
   const verifier = (ed25519 as any).Verifier.parse(did);
   // ed25519 Verifier serialises as: [multicodec varint (0xed 0x01, 2 bytes)] [32-byte key].
   // The varint of 0xed (= 237) requires 2 bytes because its high bit is set.
-  // Matches @workspace/p2p-runtime/did.ts's ED25519_PUB_MULTICODEC = [0xed, 0x01].
+  // Matches @workspace.sh/p2p-runtime/did.ts's ED25519_PUB_MULTICODEC = [0xed, 0x01].
   const tagged = verifier as Uint8Array;
   return tagged.subarray(2);
 }

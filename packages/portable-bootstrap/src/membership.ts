@@ -28,8 +28,8 @@ import {
   validateDelegation,
   type RootForResource,
   type CapabilityDescriptor,
-} from '@workspace/ucan-boundary';
-import { didFromPublicKey, type Did } from '@workspace/p2p-runtime';
+} from '@workspace.sh/ucan-boundary';
+import { didFromPublicKey, type Did } from '@workspace.sh/p2p-runtime';
 
 /**
  * What a connecting peer presents to prove membership. Today: the UCAN
