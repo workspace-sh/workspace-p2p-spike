@@ -10,13 +10,15 @@
     "demo:acme": "node --experimental-strip-types --no-warnings src/demos/acme-org.ts",
     "demo:key-delivery": "node --experimental-strip-types --no-warnings src/demos/key-delivery.ts",
     "demo:topic-auth": "node --experimental-strip-types --no-warnings src/demos/topic-auth.ts",
+    "demo:workspace": "node --experimental-strip-types --no-warnings src/demos/workspace-sdk.ts",
     "demo:bootstrap": "node --experimental-strip-types --no-warnings src/demos/bootstrap-dht.ts",
     "demo:acme:live": "node --experimental-strip-types --no-warnings src/demos/acme-org-live.ts"
   },
   "dependencies": {
     "@workspace/p2p-runtime": "*",
     "@workspace/portable-bootstrap": "*",
-    "@workspace/ucan-boundary": "*"
+    "@workspace/ucan-boundary": "*",
+    "@workspace/workspace": "*"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

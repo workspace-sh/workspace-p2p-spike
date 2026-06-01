@@ -51,6 +51,23 @@ export interface Manifest {
   createdAt: number;
   /** `did:key:z…` of the workspace's root. Subject of the attestation. */
   rootDid: Did;
+  /**
+   * Hypercore public keys (hex) for the workspace's well-known logs, so a
+   * peer opening the bundle can find them without an out-of-band exchange.
+   * Optional for back-compat.
+   *
+   * NOTE: not yet covered by the root attestation (which signs workspaceId +
+   * createdAt + formatVersion). Tampering a log key points a reader at a
+   * different log, but content stays sealed under the tier keys — a
+   * denial/confusion vector, not a confidentiality break. Extending the
+   * attestation payload to cover these is a tracked follow-up.
+   */
+  logs?: {
+    /** The workspace's primary data log. */
+    data: string;
+    /** The live key delivery log (#9). */
+    keyDelivery: string;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +124,8 @@ export interface CreateBundleInput {
   rootSecretKey: Uint8Array;
   /** One envelope produced per recipient. */
   recipients: readonly RecipientInput[];
+  /** Optional well-known log keys recorded in the manifest. */
+  logs?: { data: string; keyDelivery: string };
 }
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -173,6 +192,7 @@ export async function createBundle(input: CreateBundleInput): Promise<Bundle> {
     workspaceId: input.workspaceId,
     createdAt,
     rootDid,
+    ...(input.logs ? { logs: input.logs } : {}),
   };
 
   const attestationPayload: AttestationPayload = {

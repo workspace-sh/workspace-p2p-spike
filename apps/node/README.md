@@ -11,6 +11,7 @@ src/demos/
 ├── acme-org.ts         ← small-org walk-through, direct pipe (no network)
 ├── key-delivery.ts     ← inviting a peer AFTER creation (#9), direct pipe
 ├── topic-auth.ts       ← connect-time membership gate (#10), private DHT
+├── workspace-sdk.ts    ← the whole flow via @workspace/workspace, private DHT
 ├── bootstrap-dht.ts    ← private hyperdht bootstrap node
 └── acme-org-live.ts    ← acme-org, but over the private DHT
 ```
@@ -102,6 +103,20 @@ Runs over a real Hyperswarm against a private in-process bootstrap (no
 public DHT). Demonstrates the Noise-key↔DID binding (`identitySeed`), the
 `auth` gate in the runtime, and `verifyMembership` rejecting a wrong-root
 proof at connect time.
+
+## `demo:workspace` — the SDK facade end-to-end
+
+The whole Acme flow via `@workspace/workspace`: `Workspace.create` →
+`invite` → `write`; then `Workspace.open` on a second peer →
+replicate → `entries`. Same outcome as `demo:acme:live` but ~10 lines
+instead of ~200 — the surface the app is actually built against.
+
+```sh
+npm -w @workspace/p2p-spike-node run demo:workspace
+```
+
+Real Hyperswarm, private in-process bootstrap. Eve (uninvited) is
+rejected at `open`.
 
 ## `demo:bootstrap` + `demo:acme:live` — over a private DHT (host)
 

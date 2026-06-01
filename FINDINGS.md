@@ -45,9 +45,13 @@ Two-carrier permissions delivery, sharing one envelope atom:
 - **Live key delivery log (#9, steady-state)** — `publishDelivery` / `scanDeliveries` over a replicated Hypercore: an admin appends a sealed envelope addressed to a peer who joined *after* creation; that peer scans from a cursor, validates the UCAN against the workspace root, and unwraps. Same `createEnvelope` / `consumeEnvelope` as the bundle.
 - **Topic-layer membership auth (#10)** — `verifyMembership` binds a presented UCAN to the connection's authenticated Noise key, checks revocation, and validates the chain to the workspace root. Wired into the runtime via `CreateRuntimeOptions.auth` (gate replication behind a proof exchange) + `identitySeed` (Noise key == DID). Verified live: members replicate, a wrong-root peer is rejected at connect.
 
+### `@workspace/workspace` — app-facing SDK facade
+
+The surface the Workspace app is built against. One object composes everything: `Workspace.create` (identity, K0_org, logs, bundle, topic, auth gate — one call), `.open` (attestation + envelope + K0_org recovery + gate + replication), `.invite` (sealed envelope to both carriers), `.write` / `.entries` (transparent encrypted log), `.on('change')`. Platform-agnostic — the runtime is injected, so the package is native-dep-free and unit-testable. v1 is single-writer; Autobase multi-writer (#11), the document/section model, and `workspace://` join are deferred behind the same API. The `demo:workspace` runs the Acme flow end-to-end over a private swarm in ~10 lines (vs ~200 hand-wired).
+
 ### Tests
 
-**103 tests green across the three packages**, typecheck clean.
+**110 tests green across the four packages**, typecheck clean.
 
 ### DID identity
 

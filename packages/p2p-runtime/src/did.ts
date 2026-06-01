@@ -110,11 +110,27 @@ const ED25519_PUB_MULTICODEC = new Uint8Array([0xed, 0x01]);
  * @returns     A `did:key:z6Mk…` string compatible with ucanto / UCAN tooling.
  */
 export function didFromSeed(seed: Uint8Array): Did {
+  return didFromPublicKey(keyPairFromSeed(seed).publicKey);
+}
+
+/**
+ * Expand a 32-byte ed25519 seed to its full keypair (sodium form: 32-byte
+ * public key, 64-byte secret key = seed‖public). Centralised here so callers
+ * needing the signing key (e.g. attestation, membership) don't each reach for
+ * hypercore-crypto.
+ */
+export function keyPairFromSeed(seed: Uint8Array): {
+  publicKey: Uint8Array;
+  secretKey: Uint8Array;
+} {
+  if (seed.length !== 32) {
+    throw new Error(`seed must be 32 bytes, got ${seed.length}`);
+  }
   const kp = hypercoreCrypto.keyPair(Buffer.from(seed)) as {
     publicKey: Buffer;
     secretKey: Buffer;
   };
-  return didFromPublicKey(kp.publicKey);
+  return { publicKey: new Uint8Array(kp.publicKey), secretKey: new Uint8Array(kp.secretKey) };
 }
 
 /**

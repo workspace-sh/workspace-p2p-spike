@@ -107,6 +107,28 @@ caps protect against runaway processes. See
 Colima recommended (fully FOSS); OrbStack and Docker Desktop work
 identically with the same compose file.
 
+### Building against the SDK
+
+The app codes against `@workspace/workspace` — one object over the
+proven primitives:
+
+```ts
+import { createRuntime } from '@workspace/p2p-runtime/node';
+import { Workspace } from '@workspace/workspace';
+
+const ws = await Workspace.create({ createRuntime, folder: 'Acme.workspace', name: 'Acme' });
+await ws.invite(bobDid);
+await ws.write(new TextEncoder().encode('hello'));
+ws.on('change', render);
+
+// on another device, after receiving the folder:
+const ws2 = await Workspace.open({ createRuntime, folder: 'Acme.workspace', identitySeed });
+```
+
+`npm -w @workspace/p2p-spike-node run demo:workspace` runs this
+end-to-end over a private swarm — the same flow as the hand-wired
+`acme-org-live` demo, in ~10 lines.
+
 ### Other test paths
 
 - `npm -w @workspace/p2p-spike-node run smoke` — verifies the live
@@ -115,6 +137,8 @@ identically with the same compose file.
   topic + replication over the live public DHT
 - `npm -w @workspace/p2p-spike-node run demo:bootstrap` +
   `demo:acme:live` — same as the container demo but on the bare host
+- `npm -w @workspace/p2p-spike-node run demo:key-delivery` /
+  `demo:topic-auth` — the #9 / #10 flows in isolation
 
 See [`apps/node/README.md`](./apps/node/README.md) for the full
 testing-mode matrix.
@@ -135,6 +159,7 @@ npm-only — Bun doesn't compose cleanly with `react-native-macos`.
 | Permissions layer — root attestation | implemented |
 | Permissions layer — bootstrap envelopes | implemented |
 | Permissions layer — transparent log encryption (`encryptedLog`) | implemented |
+| Workspace SDK facade (`@workspace/workspace`) | v1 implemented (single-writer; Autobase + doc model pending) |
 | Live key delivery log ([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)) | implemented (polish pending) |
 | Topic-layer authentication ([#10](https://github.com/workspace-sh/workspace-p2p-spike/issues/10)) | implemented (topic rotation pending) |
 | `workspace://` URI scheme + `.workspace` format + discovery | designed (specs locked); see [`docs/`](./docs/) |
@@ -200,10 +225,14 @@ workspace was distributed.
 │   │       └── attestation.ts           ← root attestation sign/verify
 │   ├── ucan-boundary/                   ← @workspace/ucan-boundary
 │   │   └── src/index.ts                 ← every ucanto call lives here
-│   └── portable-bootstrap/              ← @workspace/portable-bootstrap
-│       └── src/
-│           ├── index.ts                 ← createBundle / consumeBundle
-│           └── folder.ts                ← writeBundleFolder / readBundleFolder
+│   ├── portable-bootstrap/              ← @workspace/portable-bootstrap
+│   │   └── src/
+│   │       ├── index.ts                 ← createBundle / consumeBundle / createEnvelope
+│   │       ├── folder.ts                ← writeBundleFolder / readBundleFolder
+│   │       ├── key-delivery.ts          ← publishDelivery / scanDeliveries (#9)
+│   │       └── membership.ts            ← verifyMembership (#10)
+│   └── workspace/                       ← @workspace/workspace (app-facing SDK)
+│       └── src/index.ts                 ← Workspace.create / open / invite / write
 └── apps/
     ├── node/                            ← smoke harness over real Hyperswarm
     ├── macos/native/                    ← P2PRuntimeModule (Obj-C++ TurboModule)
