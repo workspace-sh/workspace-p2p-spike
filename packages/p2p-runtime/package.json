@@ -2,6 +2,7 @@
   "name": "@workspace/p2p-runtime",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "P2P runtime interface + per-platform implementations. Hypercore + Hyperswarm under the hood.",
   "type": "module",
   "main": "./src/index.ts",

@@ -2,6 +2,7 @@
   "name": "@workspace/p2p-spike-node",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Standalone smoke harness: two NodeRuntime instances find each other via real Hyperswarm and replicate a log.",
   "type": "module",
   "scripts": {
