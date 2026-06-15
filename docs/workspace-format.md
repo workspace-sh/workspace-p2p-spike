@@ -27,6 +27,67 @@ app decisions made today don't paint us into a corner.
 
 ---
 
+## Invariants — the working form is a normal folder
+
+The product promise is the Finder/Dropbox metaphor: a workspace is a
+normal folder of files in open formats that you can browse, grep, back
+up, and open without the app. Every format decision below — and every
+future one — must hold these invariants. They exist so the metaphor is
+tested against, not re-litigated, each time a decision comes up.
+
+1. **One hidden metadata directory.** All P2P/permissions machinery
+   lives under a single hidden `.workspace/` directory — never
+   scattered dotfiles next to content, never per-document sidecar
+   files. As the metadata surface grows, it grows *inside* that one
+   directory. (The `writeBundleFolder` layout — manifest, attestation,
+   envelopes, store under one directory — is the right shape and stays
+   the only metadata surface.)
+
+2. **Content files stay plain.** Files in the working tree are never
+   encrypted, wrapped, or renamed in place. Open the folder in any
+   editor and everything works. (Tier-gated content that a peer isn't
+   authorised to read simply isn't materialised in their working tree
+   — it lives only as sealed bytes in `.workspace/store/`; it is never
+   an unreadable file sitting in the tree. See "On-disk reality".)
+
+3. **The archive is transport-only.** `name.workspace.zip` (or tar) is
+   a serialisation for channels that don't preserve folders, and for
+   backup. The app **unpacks on open and operates on the folder**, never
+   on the archive in place. This forecloses a whole class of complexity
+   (partial updates inside archives, archive locking) before it starts.
+
+4. **Survives cloud sync.** The hidden metadata must tolerate
+   Dropbox/iCloud/OneDrive syncing the folder: append-only and
+   content-addressed layouts tolerate sync races; mutable lock/state
+   files do not — so there are none. The `.workspace/` reader must also
+   tolerate iCloud Drive's dataless-faulting/eviction and Dropbox's
+   "conflicted copy" duplicates rather than corrupting on them.
+
+5. **Plain-copy safe.** A `cp -R` (or `rsync`, or a backup tool) of the
+   folder must produce a valid workspace. Nothing in `.workspace/`
+   may require the app to be present to be copied safely. The folder
+   stays greppable, rsync-able, and backupable with ordinary tools.
+
+6. **Seed/export hygiene.** A workspace's own seed/export paths must
+   handle `.workspace/` deliberately (the way the mobile seed script
+   already excludes `.git/`, `.obsidian/`, etc.). "Export this
+   workspace to share" and "back this workspace up with its keys" are
+   different operations and must not be conflatable by accident.
+
+### A caution: the macOS bundle UTI
+
+Registering `.workspace` as a Finder **bundle** (so it's a single
+double-clickable artefact) conflicts with invariant 1's spirit:
+bundles *hide their contents by default* in Finder, which cuts against
+the browsable-folder promise. "Show Package Contents" existing is not
+the same as the folder feeling normal. Decide deliberately whether the
+bundle treatment applies to the **working** folder (likely no — keep it
+a plain browsable folder) or only to **exported/portable** artefacts
+(more defensible). This is an open decision; see "Open design
+questions".
+
+---
+
 ## What a workspace looks like on disk
 
 ```
@@ -710,6 +771,13 @@ Explicit so future contributors don't quietly pick defaults:
    equivalent (manifest + attestation + envelopes, no store), is it
    a tar, zip, plain folder, single binary file? Affects how it's
    recognised by default OS tooling.
+3a. **macOS bundle UTI.** Should `.workspace` register as a Finder
+   bundle? It buys a single double-clickable artefact but hides folder
+   contents by default, which fights the browsable-folder invariant
+   (see Invariants → "A caution"). Leaning: working folders stay plain;
+   bundle treatment, if any, applies only to exported/portable
+   artefacts. Needs a deliberate call before the macOS app commits to a
+   UTI registration.
 4. **Folder-level whole-file tiering.** `.table` has `x-tier` for
    fields. Should there be an equivalent for whole files (a "tier
    this folder at `K1`" convention)? If so, where does the

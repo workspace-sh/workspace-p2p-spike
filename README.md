@@ -211,10 +211,14 @@ workspace was distributed.
 │   ├── discovery.md                     ← DNS TXT + .well-known/workspace
 │   ├── discovery-layers.md              ← local-first / LAN / WAN peer discovery
 │   ├── lighthouse.md                    ← trusted always-on node concept
+│   ├── identity-recovery.md             ← device linking, recovery, key rotation
 │   ├── permissions-model.md             ← UCAN + Hypercore protocol design
 │   ├── threat-model.md                  ← what Workspace protects (and doesn't)
 │   ├── risks.md                         ← where this could fail and what we're doing
-│   └── ucan-prior-research.md           ← UCAN library notes from earlier spike
+│   ├── ucan-prior-research.md           ← UCAN library notes from earlier spike
+│   └── adr/                             ← architecture decision records
+│       ├── 0001-ucan-library.md         ← ucanto (not iso-ucan)
+│       └── 0002-autobase-merge-strategy.md ← per-format LWW over Autobase
 ├── packages/
 │   ├── p2p-runtime/                     ← @workspace.sh/p2p-runtime
 │   │   └── src/
@@ -257,6 +261,9 @@ The design lives in `docs/`:
   / LAN / WAN peer-discovery hierarchy
 - **[`lighthouse.md`](./docs/lighthouse.md)** — the Lighthouse concept:
   trusted always-on nodes a workspace opts into for availability
+- **[`identity-recovery.md`](./docs/identity-recovery.md)** — device
+  linking, recovery (escrow key), and key rotation as three concrete
+  flows over the shipped primitives
 - **[`permissions-model.md`](./docs/permissions-model.md)** — UCAN +
   Hypercore + Autobase protocol design, two-carrier envelope delivery,
   revocation, scaling
@@ -267,6 +274,8 @@ The design lives in `docs/`:
   positions taken, residual unknowns
 - **[`ucan-prior-research.md`](./docs/ucan-prior-research.md)** —
   UCAN library notes (library comparison, gotchas)
+- **[`adr/`](./docs/adr/)** — architecture decision records: UCAN
+  library choice (0001), Autobase merge strategy (0002)
 
 Start with `workspace-format.md` if you want to understand what's
 being built. Then `threat-model.md` for the contract that bounds it,
