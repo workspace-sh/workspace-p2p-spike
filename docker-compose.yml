@@ -1,0 +1,39 @@
+# Containerised P2P testing for the spike.
+#
+# A single `acme` service runs the whole demo — bootstrap + all three peers
+# in one process on loopback, exactly mirroring the single-host setup that's
+# verified to work. Everything stays inside the container; hard memory and
+# CPU limits protect the host. No ports published, no host network impact.
+#
+# We deliberately keep this to one container rather than splitting the
+# bootstrap into its own service: cross-container hyperdht discovery requires
+# negotiating bridge-network address reflection, which adds fragility for no
+# benefit here — the goal is host isolation + a working demo, both of which
+# the single-container setup delivers.
+#
+# Usage:
+#   docker compose up --build --abort-on-container-exit acme
+#
+# Tear down:
+#   docker compose down
+#
+# See docker/README.md for the why + the testing-mode matrix.
+
+services:
+  acme:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: workspace-p2p-spike:latest
+    container_name: workspace-spike-acme
+    # SPAWN_BOOTSTRAP=1 makes the demo run its own bootstrap in-process on
+    # loopback, so the whole flow is self-contained in this one container.
+    environment:
+      SPAWN_BOOTSTRAP: "1"
+    command: npm -w @workspace/p2p-spike-node run demo:acme:live
+    # Hard limits: bootstrap + 3 peers in one process. 512MB caps any runaway.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'

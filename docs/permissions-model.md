@@ -6,9 +6,12 @@ spike-side companion to
 which is the consumer-facing view. This document captures the
 underlying cryptographic and protocol choices.
 
-Status: **design**. None of this is implemented yet. The Phase 1/3a/3b
-work in this repo proves the runtime + IPC; the permissions layer is
-the next major piece, tracked in
+**Status:** design + partial implementation. The wrap primitive, UCAN
+boundary module, root attestation primitive, and bootstrap envelope
+flow are implemented (`@workspace.sh/p2p-runtime`, `@workspace.sh/ucan-boundary`,
+`@workspace.sh/portable-bootstrap`). The live key delivery log (#9),
+topic-layer auth at the noise handshake (#10), and the Autobase
+multi-writer wrapper (#11) remain to be built. Tracked in
 [issue #5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5).
 
 ---
@@ -125,32 +128,78 @@ Each delivery is one self-contained payload:
 }
 ```
 
-### The delivery channel — also a Hypercore
+### Two carriers — bundled envelopes and the live key delivery log
 
-Key delivery uses the **same protocol as document data**. There is no
-separate infrastructure, mailbox server, or relay.
+The same payload shape travels two ways, picked by context:
 
-The org has a "key delivery" Hypercore log, replicated to every member.
-Each block is one delivery payload addressed to one peer's DID. On
-joining or coming online, a peer scans the log for blocks addressed to
-them, unwraps the keys, and ignores the rest.
+#### Carrier 1 — Bundled envelopes (offline first-contact)
+
+Inside the `.workspace` bundle itself: `.workspace/envelopes/` holds
+one envelope per intended recipient, sealed to their DID. When the
+bundle is delivered offline (USB stick, AirDrop, email attachment,
+even just dragged into a shared folder), the recipient's app finds
+their envelope locally and unwraps the keys without needing to be
+online with the original sender.
+
+Implemented in `@workspace.sh/portable-bootstrap`. Used when:
+
+- Inviting a new member who is not yet on the swarm
+- Distributing a workspace snapshot via offline channels
+- First-contact delivery, where neither sender nor recipient may be
+  online simultaneously
+
+See [`workspace-format.md`](./workspace-format.md) for the on-disk
+shape.
+
+#### Carrier 2 — Live key delivery Hypercore log (steady-state churn)
+
+A "key delivery" Hypercore log replicated to every workspace member.
+Each block is one delivery payload addressed to one peer's DID. New
+invites, key rotations, and ongoing membership changes ride this
+channel. Peers scan from their last-seen position for blocks
+addressed to them, unwrap, and ignore the rest.
 
 ```
 Key delivery Hypercore log (replicated to all org peers):
 
-Block 0: { ucan: ..., wrapped_key: ..., recipient: did:key:zABC… }
-Block 1: { ucan: ..., wrapped_key: ..., recipient: did:key:zDEF… }
+Block 0: { kind: "workspace/key-delivery@1", envelope: { recipient: zABC…, ucan, wrappedKey, … } }
+Block 1: { kind: "workspace/key-delivery@1", envelope: { recipient: zDEF…, ucan, wrappedKey, … } }
+Block 2: <revocation block — see Revocation below>
 ...
 ```
 
-Properties:
-- Sender and recipient never need to be online simultaneously
-- Any peer carries the message — it's just another Hypercore
-- Wrapped key blobs are tiny (~100 bytes each)
-- No central infrastructure
+Each block is a tagged record. The `kind` tag lets the log carry more
+than key deliveries later (revocation blocks the obvious next variant);
+scanners skip records of a `kind` they don't recognise. The `envelope`
+is byte-identical to a bundle envelope — same `createEnvelope` produces
+it, same `consumeEnvelope` validates and unwraps it.
 
-This is the asynchronous secure messaging pattern, applied to key
-distribution.
+**Implemented** in `@workspace.sh/portable-bootstrap`
+([#9](https://github.com/workspace-sh/workspace-p2p-spike/issues/9)):
+`publishDelivery(log, envelope)` appends; `scanDeliveries(log, {selfDid,
+selfSecretKey, rootDid, fromCursor})` reads from a cursor, returns the
+deliveries addressed to this peer (validated + unwrapped) plus a new
+cursor to resume from. A block that fails validation routes to an
+`onError` callback rather than aborting the scan — deliveries arrive
+over time and one bad block shouldn't blind a peer to the rest.
+
+Used when:
+
+- An admin invites someone after the workspace is already live
+- Tier keys rotate (e.g. after a departure)
+- Existing members need new envelopes (a new tier is created, an
+  existing tier's key is rotated)
+
+#### Properties shared by both carriers
+
+- Sender and recipient never need to be online simultaneously
+- No central infrastructure — both rest on Hypercore replication
+- Wrapped key blobs are tiny (~100 bytes each)
+- Same `wrap` primitive, same UCAN format, same validation rules
+
+The choice of carrier is transport-only. The payload, the
+cryptographic guarantees, and the recipient's local handling are
+identical.
 
 ---
 
@@ -242,6 +291,58 @@ To close this lever:
 Topic membership is the second lever** — network-layer access, distinct
 from encryption-layer access.
 
+**Implemented (#10).** Connection-time authentication works end-to-end:
+
+- The runtime derives its Hyperswarm Noise keypair from the same seed as
+  its `did:key` (`CreateRuntimeOptions.identitySeed`), so a peer's
+  authenticated connection key *is* its DID. This binding is what makes
+  the proof unspoofable.
+- `CreateRuntimeOptions.auth` gates replication: on each connection the
+  runtime exchanges membership proofs over a `workspace/auth@1` channel
+  (on the connection's shared Protomux, alongside replication) and calls
+  the `verify` hook before replicating. Reject or timeout drops the
+  connection.
+- `verifyMembership` (`@workspace.sh/portable-bootstrap`) is the decision:
+  it binds the presented UCAN's audience to the authenticated key,
+  checks revocation, and validates the chain to the workspace root. A
+  sniffed UCAN replayed on another peer's connection fails the audience
+  bind.
+
+The remaining piece is **topic rotation** (point 2) — rotating the
+discovery topic alongside `K0_org` on departure so a revoked peer can't
+even rediscover the swarm. Tracked with the broader rotation work.
+
+### Revocation notice block on the key delivery log
+
+When a peer is revoked, an admin appends a signed **revocation block**
+to the key delivery log:
+
+```json
+{
+  "kind": "revocation",
+  "subject": "did:key:zMarco…",
+  "revokedAt": 1717200000,
+  "issuer": "did:key:zLeslie…",
+  "signature": "<base64-ed25519-signature>"
+}
+```
+
+Signed by the issuer (an admin with revoke capability over the
+subject's chain). Replicated to all peers. The subject's app sees
+the block on next sync, reads the workspace's
+[`.workspace/policy.json`](./workspace-format.md), and runs whatever
+cleanup the policy declares.
+
+This is **cooperative-client behaviour** — a hint to well-behaved
+apps, not a cryptographic enforcement. A modified client can ignore
+the revocation notice. The cryptographic levers (key rotation,
+topic-layer rejection) carry the actual security load. See
+[`threat-model.md`](./threat-model.md) for the contract.
+
+The revocation block being part of the replicated log means a
+revoked peer cannot escape it by deleting their local copy — next
+sync restores the canonical state.
+
 ---
 
 ## Scaling
@@ -300,27 +401,61 @@ address is never shared with the wider org.
 
 ## What's resolved vs. what remains
 
-### Resolved by existing components
+### Resolved (implemented in this repo)
 
 - **Identity** — `did:key:z6Mk…` derived from Hypercore ed25519
-  (implemented in this repo, `packages/p2p-runtime/src/did.ts`)
-- **Sync layer** — Hypercore + Hyperswarm (Phase 1 of this repo)
-- **macOS IPC** — NSTask + JSON-RPC (Phase 3b of this repo)
+  (`packages/p2p-runtime/src/did.ts`)
+- **DID encode/decode** — `didFromPublicKey` / `publicKeyFromDid`
+  for the bidirectional mapping needed by the wrap primitive and
+  attestation flow
+- **Sync layer** — Hypercore + Hyperswarm
+- **macOS IPC** — NSTask + JSON-RPC
+- **Wrap primitive** — X25519 ECDH sealing for delivery envelopes
+  (`packages/p2p-runtime/src/wrap.ts`)
+- **Root attestation** — sign + verify over `(workspaceId, createdAt,
+  formatVersion)` (`packages/p2p-runtime/src/attestation.ts`)
+- **UCAN boundary** — issueDelegation, validateDelegation with
+  canIssue override, serialise, whole-second expiry handling
+  (`packages/ucan-boundary`)
+- **Bootstrap envelopes** — bundle creation, consumption, JSON
+  serialisation, tamper detection (`packages/portable-bootstrap`)
+- **Live key delivery log (#9)** — `publishDelivery` / `scanDeliveries`
+  over a replicated Hypercore; the steady-state carrier for peers who
+  join after creation (`packages/portable-bootstrap/src/key-delivery.ts`)
+- **Transparent log encryption** — `encryptedLog(log, key)` seals on
+  append / opens on get, so tier-gated content rides the same
+  replication path as ciphertext (`packages/p2p-runtime/src/encrypted-log.ts`)
+- **Topic-layer auth (#10)** — `verifyMembership`
+  (`packages/portable-bootstrap/src/membership.ts`) + the runtime's
+  connection gate (`CreateRuntimeOptions.auth` + Noise-key/DID binding via
+  `identitySeed`); rejects non-member connections before replication
+
+### Resolved (design + accepted contracts)
+
 - **Multi-writer** — Autobase (in production at Keet; design-validated,
-  not yet spiked here)
-- **Forward-only revocation** — accepted contract, two levers
+  implementation pending in #11)
+- **Forward-only revocation** — accepted contract, two cryptographic
+  levers plus the cooperative policy hint
+- **Two carriers for envelope delivery** — bundled (offline) +
+  live key delivery log (steady-state)
 
-### Open engineering work (well-understood problems)
+### Open engineering work
 
-- **Topic-layer connection authentication** — Hyperswarm supports
-  per-connection authentication via the noise handshake; needs
-  implementation that checks a presented UCAN
-- **Autobase merge semantics** for `rows.ndjson`-style data — choose
-  LWW, custom, or a CRDT on top
-- **ucanto delegation for `K_n`** — validate that ucanto's capability
-  model handles wrapped-key delivery cleanly (issue #5)
-- **Key delivery Hypercore log shape** — concrete block format, scan
-  efficiency, garbage collection of already-consumed delivery blocks
+- **Key delivery log — remaining polish (#9)** — core implemented;
+  still want scan-efficiency tuning (index by recipient) and GC of
+  superseded delivery blocks for long-lived workspaces
+- **Topic rotation on departure** — the second half of topic-layer auth
+  (#10): rotate the discovery topic alongside `K0_org` so a revoked peer
+  can't rediscover the swarm. (Connection-time membership auth itself is
+  implemented — see above.)
+- **Autobase wrapper (#11)** + **merge strategy (#12)** — multi-writer
+  document API + concurrent-edit semantics
+- **Revocation notice block + policy enforcement** — block format
+  defined above; needs the live key delivery log (#9) and
+  app-side honour-the-policy logic
+- **Workspace policy file** — schema defined in
+  [`workspace-format.md`](./workspace-format.md); honoured by app at
+  revocation, key rotation, workspace deletion events
 
 ### Upgrade path (out of scope for v1)
 
@@ -334,19 +469,33 @@ address is never shared with the wider org.
 - Metadata is observable to peers on the same Hyperswarm topic — the
   topic lever closes this post-departure
 - Pre-quantum encryption assumption — the protocol layer is replaceable
-  beneath the `@workspace/p2p-runtime` interface when post-quantum
+  beneath the `@workspace.sh/p2p-runtime` interface when post-quantum
   migration becomes relevant
 
 ---
 
 ## Cross-references
 
+- [`threat-model.md`](./threat-model.md) — the contract this protocol
+  serves (what Workspace protects, what it doesn't, forward-only
+  revocation, audit trail = delegation chain, cooperative-client
+  policy)
+- [`workspace-format.md`](./workspace-format.md) — the `.workspace`
+  container format that distributes the artefacts this protocol
+  produces (folder-as-unit, `workspace://` URI, hidden schema
+  entries, policy file)
+- [`risks.md`](./risks.md) — where this could fail and what we're
+  doing about it
+- [`lighthouse.md`](./lighthouse.md) — the always-on-node concept;
+  participates in the same UCAN + replication layer as any other peer
+- [`discovery-layers.md`](./discovery-layers.md) — how peers find
+  each other (local / LAN / WAN) before this protocol takes over
 - [`FINDINGS.md`](../FINDINGS.md) — spike verdict + extraction checklist
 - [`docs/ucan-prior-research.md`](./ucan-prior-research.md) — UCAN
-  notes from the earlier spike (ucanto `canIssue` gotcha, etc.)
+  library notes (ucanto `canIssue` gotcha, library comparison)
 - [`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md) —
   consumer-side view of this same model, per file type
 - [Issue #5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5) —
   UCAN + Hypercore identity bridge (now expanded by this doc)
 - [Issue #6](https://github.com/workspace-sh/workspace-p2p-spike/issues/6) —
-  mobile path (Phase 2)
+  mobile path

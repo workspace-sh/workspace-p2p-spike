@@ -8,7 +8,7 @@
 // discovery + transport piece works end-to-end.
 
 import { createHash } from 'node:crypto';
-import { createRuntime } from '@workspace/p2p-runtime/node';
+import { createRuntime } from '@workspace.sh/p2p-runtime/node';
 
 const dec = new TextDecoder();
 const enc = new TextEncoder();

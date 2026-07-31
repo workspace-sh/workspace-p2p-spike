@@ -1,4 +1,4 @@
-// macOS implementation of @workspace/p2p-runtime.
+// macOS implementation of @workspace.sh/p2p-runtime.
 //
 // Uses a bespoke TurboModule (P2PRuntimeModule) that spawns a Node child
 // process via NSTask and bridges its stdin/stdout to JS as native events.

@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/p2p-runtime",
+  "name": "@workspace.sh/p2p-runtime",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
@@ -26,7 +26,7 @@
     "test": "node --experimental-strip-types --no-warnings --test \"tests/**/*.test.ts\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.6"
   },
   "dependencies": {
     "b4a": "1.8.0",

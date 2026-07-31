@@ -1,6 +1,6 @@
 # Apps
 
-Per-host harnesses that consume `@workspace/p2p-runtime`. Empty until the relevant phase of [PLAN.md](../PLAN.md) begins.
+Per-host harnesses that consume `@workspace.sh/p2p-runtime`. Empty until the relevant phase of [PLAN.md](../PLAN.md) begins.
 
 When ready, scaffold:
 

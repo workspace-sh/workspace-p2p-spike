@@ -1,0 +1,31 @@
+{
+  "name": "@workspace.sh/ucan-boundary",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Single-file boundary module isolating every ucanto call. Issues, validates, serialises, and decodes UCAN delegations for the permissions model.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --no-warnings --test \"tests/**/*.test.ts\""
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "dependencies": {
+    "@ucanto/core": "^10.4.6",
+    "@ucanto/principal": "^9.0.3",
+    "@ucanto/validator": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.0"
+  }
+}

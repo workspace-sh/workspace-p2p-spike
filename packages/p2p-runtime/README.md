@@ -1,4 +1,4 @@
-# @workspace/p2p-runtime
+# @workspace.sh/p2p-runtime
 
 P2P runtime interface + per-platform implementations. The TypeScript shape every Workspace surface (web, mobile via Expo, macOS via react-native-macos, eventually Windows) talks to.
 
@@ -7,7 +7,7 @@ P2P runtime interface + per-platform implementations. The TypeScript shape every
 ## Shape
 
 ```ts
-import { createRuntime, type P2PRuntime } from '@workspace/p2p-runtime';
+import { createRuntime, type P2PRuntime } from '@workspace.sh/p2p-runtime';
 
 const runtime = await createRuntime({ storage: '/path/to/data' });
 await runtime.ready();
@@ -35,7 +35,7 @@ The bundler picks the matching `runtime.<platform>.ts`:
 For plain Node consumers (the Phase 1 smoke test, the spawned-Node child on macOS), import directly:
 
 ```ts
-import { createRuntime } from '@workspace/p2p-runtime/node';
+import { createRuntime } from '@workspace.sh/p2p-runtime/node';
 ```
 
 ## Why This Shape

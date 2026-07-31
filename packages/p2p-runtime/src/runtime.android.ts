@@ -5,7 +5,7 @@ import type { CreateRuntimeOptions, P2PRuntime } from './types.ts';
 
 export async function createRuntime(_opts: CreateRuntimeOptions = {}): Promise<P2PRuntime> {
   throw new Error(
-    '[@workspace/p2p-runtime/android] not implemented yet — Phase 2 of PLAN.md (react-native-bare-kit + bare-pack)',
+    '[@workspace.sh/p2p-runtime/android] not implemented yet — Phase 2 of PLAN.md (react-native-bare-kit + bare-pack)',
   );
 }
 

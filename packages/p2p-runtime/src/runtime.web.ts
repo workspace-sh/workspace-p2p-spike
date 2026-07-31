@@ -33,7 +33,7 @@ export async function createRuntime(_opts: CreateRuntimeOptions = {}): Promise<P
 
 function unsupported(method: string): never {
   throw new Error(
-    `[@workspace/p2p-runtime/web] ${method}() not supported in browser. ` +
+    `[@workspace.sh/p2p-runtime/web] ${method}() not supported in browser. ` +
       'See PLAN.md — running the runtime in-browser would need a WebSocket relay or a WASM port.',
   );
 }
