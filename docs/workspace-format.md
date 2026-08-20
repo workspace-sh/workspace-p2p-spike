@@ -68,11 +68,37 @@ tested against, not re-litigated, each time a decision comes up.
    may require the app to be present to be copied safely. The folder
    stays greppable, rsync-able, and backupable with ordinary tools.
 
-6. **Seed/export hygiene.** A workspace's own seed/export paths must
-   handle `.workspace/` deliberately (the way the mobile seed script
-   already excludes `.git/`, `.obsidian/`, etc.). "Export this
-   workspace to share" and "back this workspace up with its keys" are
-   different operations and must not be conflatable by accident.
+6. **Seed/export hygiene.** Any path that copies a workspace tree —
+   seed scripts, export flows, fixture tooling, backup helpers — must
+   handle `.workspace/` deliberately. "Export this workspace to share"
+   and "back this workspace up with its keys" are different operations
+   and must not be conflatable by accident.
+
+   Two concrete rules, because the general statement was not enough
+   (see below):
+
+   - **`.workspace/keys/` must never be copied to another device, in
+     any mode, behind any flag.** It is this peer's own identity. A
+     second device is a second peer and mints its own.
+   - **Excluding noise is not excluding secrets.** A copy path that
+     prunes `.git/` and `node_modules/` has demonstrated a mechanism,
+     not a policy. The two look identical in code and are unrelated in
+     intent, so the presence of one must never be read as evidence of
+     the other.
+
+   Match on **path segments**, not basenames: a working tree may
+   legitimately contain a folder called `keys/`, and a fixtures tree may
+   contain several `.workspace` folders at any depth.
+
+   *This invariant was violated by the first tool it named.* An earlier
+   revision cited the Workspace mobile seed script as already handling
+   this correctly. It was not — it pruned OS and VCS noise and copied
+   `.workspace/` wholesale, private keys included, and would have put
+   one developer's identity onto every simulator they seeded
+   (`workspace-sh/workspace#233`). The invariant was written, published,
+   and pointed at the exact file that broke it. Prose in this repository
+   cannot enforce anything in another one; treat these rules as
+   requiring a test, not a reader.
 
 ### A caution: the macOS bundle UTI
 
@@ -530,6 +556,13 @@ Local key state for this peer specifically. Holds:
 Not part of the shared workspace state — this is per-peer machinery.
 Not included in archive form unless the recipient is explicitly
 exporting their own state.
+
+**Never travels to another device.** Not in a share, not in a seed, not
+in a fixture copy, not behind a developer flag. A peer that needs keys
+gets them through an envelope sealed to its own DID; a peer that copies
+someone else's `keys/` has stolen an identity rather than joined a
+workspace. See invariant 6 — this rule exists in the explicit form it
+does because the general version was read past once already.
 
 ### `store/`
 
