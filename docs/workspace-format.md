@@ -135,7 +135,7 @@ my-org.workspace/                      ← the workspace itself
     ├── policy.json                    ← workspace's cleanup/rotation policy
     ├── envelopes/                     ← bootstrap envelopes for invited peers
     ├── keys/                          ← this peer's local key state
-    └── store/                         ← encrypted Hypercore blocks
+    └── store/                         ← logs in transport form (see `store/`)
 ```
 
 Everything *above* `.workspace/` is the user-facing working tree:
@@ -566,11 +566,75 @@ does because the general version was read past once already.
 
 ### `store/`
 
-The Hypercore corestore. Encrypted append-only blocks for the
-workspace's data log and key-delivery log. Opaque to anyone
-inspecting the directory by hand. The Workspace app projects
+The workspace's logs in **transport form**: an append-only,
+content-addressed serialisation of every Hypercore block, which is
+what makes the folder a complete, portable copy of the workspace.
+Opaque to anyone inspecting it by hand. The Workspace app projects
 relevant blocks into the working tree (for public-tier content) or
 into in-memory views (for tier-gated content).
+
+Layout (store format v1):
+
+```
+store/
+└── v1/
+    └── <log-key-hex>/
+        ├── 0
+        ├── 1
+        └── …                ← one file per block
+```
+
+- Each file holds one block exactly as it exists in the log —
+  **ciphertext** under the relevant tier key — together with the
+  Merkle proof that lets any peer verify it against the log's public
+  key, offline, with no other party present.
+- Committed files are never rewritten, renamed, or deleted. There are
+  no locks, no manifests, no counters: the set of files *is* the
+  state, and a log's length is the highest contiguous index present.
+  This is the property invariant 4 requires, satisfied by
+  construction rather than by discipline.
+- Writers create each file atomically (write to a temp name inside
+  `store/`, fsync, rename into place). Readers ignore any name that
+  is not a bare block index, which also makes them immune to sync
+  engines' conflicted-copy siblings.
+
+### The store has two forms — only one lives in the folder
+
+The live store the app operates on — the **working store** — is a
+Corestore, and Corestore v7 persists through RocksDB: fast, mutable,
+and full of exactly the lock and manifest files (`LOCK`, `CURRENT`,
+`MANIFEST-*`) that invariant 4 forbids from ever meeting a cloud-sync
+engine. It therefore lives in app-private storage, outside the
+folder, and is **not part of this format**:
+
+| Platform | Working store location |
+|---|---|
+| macOS | `~/Library/Application Support/<bundle id>/p2p/store` |
+| iOS / Android | app container documents directory, under `/p2p` |
+
+The working store is a rebuildable cache: the union of every
+transport form it has hydrated plus writes not yet flushed. Losing it
+loses nothing that has been flushed or replicated.
+
+Lifecycle between the two forms:
+
+```
+open    → hydrate: ingest transport blocks the working store lacks,
+          verifying each against its log's public key
+edit    → append to the working store; replicate to peers as normal
+close   → flush: write blocks the transport form lacks
+share   → flush, then the folder is copied by any ordinary means
+```
+
+Copying the folder mid-write yields a workspace that is **valid but
+possibly stale**: every complete block file verifies, the newest
+blocks may be absent, and staleness heals through ordinary
+replication when the copy next syncs. A torn block file fails
+verification and is ignored, then re-fetched. This is the same
+recency model as copying any file while its author is still typing.
+
+Rationale, options considered, and the history that led here:
+[`adr/0003-store-dual-form.md`](./adr/0003-store-dual-form.md).
 
 ---
 
