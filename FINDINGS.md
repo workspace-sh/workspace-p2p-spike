@@ -120,7 +120,7 @@ Project board: https://github.com/orgs/workspace-sh/projects/6
 ## Open questions (not blockers)
 
 - **Node binary on macOS** — development uses the system `node`; a production RN-macOS app needs a bundled static binary or an assumption that Node is present. Either is tractable.
-- **Corestore persistence** — `:memory:` is a temp directory under the hood. Production storage path needs to be wired to the app's sandbox container.
+- ~~**Corestore persistence**~~ — **resolved** ([ADR 0003](./docs/adr/0003-store-dual-form.md)): the store has two forms. The RocksDB working store lives in app-private storage (macOS Application Support; mobile app containers); `.workspace/store/` carries an append-only serialised transport form, flushed on close/share and hydrated on open. Normative detail in [`workspace-format.md`](./docs/workspace-format.md) § `store/`; app-side implementation tracked in workspace#249.
 
 ---
 
