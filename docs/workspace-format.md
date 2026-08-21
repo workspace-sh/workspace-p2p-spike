@@ -579,24 +579,32 @@ Layout (store format v1):
 store/
 └── v1/
     └── <log-key-hex>/
-        ├── 0
-        ├── 1
-        └── …                ← one file per block
+        ├── 000000
+        ├── 000001
+        └── …                ← one file per replication message, in order
 ```
 
-- Each file holds one block exactly as it exists in the log —
-  **ciphertext** under the relevant tier key — together with the
-  Merkle proof that lets any peer verify it against the log's public
-  key, offline, with no other party present.
+- Each file holds one message of Hypercore's own replication protocol
+  (`wire.data`): block **ciphertext** under the relevant tier key,
+  the Merkle proof for it, and — in the first message of a log — the
+  manifest and signed length upgrade. Hydration is a replay: apply
+  the files in ascending sequence exactly as a replica applies
+  messages from a live peer, verifying each against the log's public
+  key, offline, with no other party present. The transport form is
+  the replication protocol, persisted — not a second format with its
+  own verification story.
 - Committed files are never rewritten, renamed, or deleted. There are
-  no locks, no manifests, no counters: the set of files *is* the
-  state, and a log's length is the highest contiguous index present.
-  This is the property invariant 4 requires, satisfied by
-  construction rather than by discipline.
+  no locks, no manifests, no counters: a flush only ever appends
+  files with higher sequence numbers. This is the property invariant
+  4 requires, satisfied by construction rather than by discipline.
 - Writers create each file atomically (write to a temp name inside
   `store/`, fsync, rename into place). Readers ignore any name that
-  is not a bare block index, which also makes them immune to sync
-  engines' conflicted-copy siblings.
+  is not a bare zero-padded sequence number, which also makes them
+  immune to sync engines' conflicted-copy siblings; a torn or
+  tampered file fails verification and is skipped.
+- Sequence numbers order the *replay*, not the blocks: the protocol
+  may deliver blocks out of index order, and the proofs are built for
+  a reader that has applied precisely the preceding messages.
 
 ### The store has two forms — only one lives in the folder
 
