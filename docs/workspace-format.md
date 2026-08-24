@@ -63,6 +63,17 @@ tested against, not re-litigated, each time a decision comes up.
    tolerate iCloud Drive's dataless-faulting/eviction and Dropbox's
    "conflicted copy" duplicates rather than corrupting on them.
 
+   *Implementation status, so the invariant is not read as a
+   description of what exists.* The layout half holds: append-only and
+   content-addressed throughout, and ADR 0003 moved RocksDB out of the
+   folder for precisely this reason, so there are no mutable state
+   files. Conflicted-copy tolerance holds for store filenames, with a
+   test. Dataless tolerance is **partial**: the integration's tree walk
+   skips dataless files, and the reader does not yet — tracked as
+   [workspace#237](https://github.com/workspace-sh/workspace/issues/237).
+   See "Things that can go wrong" for what each of these actually
+   means in practice.
+
 5. **Plain-copy safe.** A `cp -R` (or `rsync`, or a backup tool) of the
    folder must produce a valid workspace. Nothing in `.workspace/`
    may require the app to be present to be copied safely. The folder
@@ -316,11 +327,51 @@ changes underneath them.
   copied to the other can hit name collisions. Workspace normalises
   to lowercase internally for ID purposes; the on-disk name is
   whatever the user picked.
-- **iCloud / OneDrive / Dropbox over a workspace** — these
-  services may rewrite files (compression, conflicted-copy
-  duplicates, dot-prefix renames). Nesting a workspace inside
-  another sync engine works but isn't recommended; the right move
-  is to share via the workspace's own protocol.
+- **iCloud / OneDrive / Dropbox over a workspace** — supported,
+  and required to be: invariant 4 says the metadata must survive
+  exactly this, and the placement section below lists a Dropbox
+  folder as an ordinary home. What follows is what a reader must
+  actually handle. (An earlier version of this bullet named
+  compression and dot-prefix renames and recommended against
+  nesting at all. Both were checked on macOS 15 and neither holds;
+  see below. The recommendation went with them.)
+
+  - **Dataless faulting.** The real hazard, and the one the
+    earlier list omitted. iCloud evicts file *contents* while
+    keeping the name and the full logical size in `stat`. A read
+    either blocks while the file downloads or fails. A tree walk
+    that reads everything will force a download of the whole
+    folder; a reader that treats a failed read as an empty file
+    will destroy data. Portable signature, no Foundation needed:
+    `size > 0 && blocks == 0`. Skip such a file — say nothing
+    about it — rather than reading or deleting it.
+
+  - **Conflicted-copy duplicates.** Real. A sync engine that sees
+    two versions writes a second file beside the first:
+    `000000 (Leslie's conflicted copy 2026-08-19).bin`. Store
+    filenames are strictly sequence-numbered, so the reader's
+    filename pattern must reject anything that is not exactly a
+    sequence number — a lenient match would splice a duplicate
+    into the log as a real entry. Handled today for store files
+    by an exact six-digit match, which also covers the flush's own
+    `.tmp-<seq>` files if a sync engine catches one mid-rename:
+    they are inert clutter, never a log entry.
+
+  - **Compression is not a hazard.** Transparent at the VFS layer:
+    `st_blocks` changes, the bytes a read returns do not. Nothing
+    to handle.
+
+  - **Dot-prefix renames are historical.** The `.foo.icloud`
+    placeholder is legacy. Current macOS evicts *in place*,
+    keeping the filename, which is why dataless faulting above is
+    the thing to handle instead. Checked on this machine: the
+    newest such placeholder dates from 2016, and none has been
+    created since 2025.
+
+  Sharing via the workspace's own protocol is still the better way
+  to *share* — a sync engine gives you a copied folder, not a
+  peer. That is a reason to prefer the protocol, not a reason the
+  folder must avoid a sync engine.
 - **Symlinks** — followed by default; circular symlinks abort the
   affected subtree.
 - **Large-file writes mid-watch** — the watcher waits for size to
