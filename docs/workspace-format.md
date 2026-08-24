@@ -385,6 +385,17 @@ Designed; implementation pending. Tracked alongside the rest of
 the working-tree work in
 [#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24).
 
+### A note on the network
+
+Nothing above waits on a peer. That is deliberate and it is
+enforced, not merely intended: the DHT announce has been measured
+at **40 seconds** on a cellular connection, against 73 ms for
+opening the corestore. A local-first format whose local operations
+wait on a network round trip is not local-first.
+
+See [network-conditions.md](./network-conditions.md) for the
+measurements, the suspected-timeout tell, and the rules that follow.
+
 ---
 
 ## Two ways to view a workspace — file or URL
