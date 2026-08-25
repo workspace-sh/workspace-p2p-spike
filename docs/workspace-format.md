@@ -385,6 +385,18 @@ Designed; implementation pending. Tracked alongside the rest of
 the working-tree work in
 [#24](https://github.com/workspace-sh/workspace-p2p-spike/issues/24).
 
+### A note on holding several
+
+One device runs one runtime — one corestore, one swarm, one
+identity — and every workspace it has open lives inside it. A
+connection is per PEER rather than per workspace, because
+Corestore multiplexes every core it holds over one stream, so
+sharing ten workspaces with someone costs one connection and not
+ten.
+
+See [many-workspaces.md](./many-workspaces.md) for the cost model
+and the three rules an implementation has to follow.
+
 ### A note on the network
 
 Nothing above waits on a peer. That is deliberate and it is
