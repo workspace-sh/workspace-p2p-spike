@@ -235,6 +235,87 @@ build here.
   state it is in. "Not syncing, because this connection is metered" is a
   different sentence from "connecting", and only one of them is actionable.
 
+## A flow budget that adapts
+
+The design that follows from the gap above. Not implemented in this repo — this
+is the specification; the app implements it.
+
+### The idea
+
+Congestion control regulates how fast one stream sends. The equivalent for flow
+count is a **budget**: an upper bound on concurrent flows, adjusted by whether
+our own requests are succeeding.
+
+The insight that makes it work: **a NAT table that is full rejects new mappings,
+and the app filling it is the first to notice**, because its own new flows start
+failing. So the harm we do to others has a signature we can see in our own
+numbers — the same trick LEDBAT plays with delay, one layer up.
+
+### The signal
+
+Everything needed is already computed by `dht-rpc` and Hyperswarm:
+
+```
+dht.stats.requests = { active, total, responses, timeouts, retries }
+swarm._allConnections.size   // flows held
+swarm.connecting             // flows in flight
+```
+
+Nobody has wired them into an admission decision. `dht-rpc` uses its own numbers
+only to yield to its own queries.
+
+### The rule
+
+AIMD — additive increase, multiplicative decrease — applied to flow admission
+rather than send rate. The shape is borrowed deliberately: it is well understood,
+it is stable, and it fails towards being quiet.
+
+- **Healthy** (failure rate below the low-water mark): budget grows by one per
+  interval. Slowly, because the cost of being wrong upwards is someone else's
+  connection.
+- **Stressed** (failure rate above the high-water mark **and** flows near the
+  budget): budget halves. Quickly, because the damage is already happening.
+- The second condition matters. A high failure rate while we hold two flows is a
+  bad network, not us. Halving would be superstition.
+
+### Where the environment comes in
+
+The environmental signal — expensive link, hotspot-sized subnet — sets the
+**starting budget and the ceiling**, not the behaviour. It is a prior, not a
+verdict:
+
+| link | start | ceiling |
+|---|---|---|
+| Unrestricted | Hyperswarm default | Hyperswarm default |
+| Expensive or hotspot-shaped | small | modest |
+| No link | zero | zero |
+
+This is the right division of labour. The environment is knowable instantly and
+imprecisely; the pressure is knowable accurately but only after acting. Starting
+careful on a hotspot avoids the first burst doing the damage, and adaptation
+handles everything the heuristic gets wrong — including a hotspot that turns out
+to cope fine, which will simply grow its budget.
+
+### Why not just cap statically
+
+A static cap is a guess that is wrong on both sides: too low on a link that
+could take more, too high on one that cannot. It also cannot notice that
+conditions changed — a hotspot with one other device on it is a different
+proposition from one with six.
+
+### Honest limits
+
+- **We cannot attribute the pressure.** A failure rate that climbs because a
+  video call started looks identical to one we caused. The response is the same
+  either way — open fewer flows — so this is tolerable, but it is not
+  measurement.
+- **A floor is required.** Below some budget the workspace cannot sync at all,
+  and silently reaching that state is worse than syncing slowly. The floor
+  should be "can reach one peer", and hitting it is worth reporting.
+- **It is unverified.** The mechanism is inferred from one reproduction. The
+  measurement that would confirm it — flow counts during a join, on a hotspot
+  and on a home router — is still the outstanding row on this page.
+
 ## Adding a row
 
 ```ts
