@@ -132,6 +132,60 @@ Flow count and table pressure during a join are **still unmeasured**, and
 should get a row of their own on a hotspot and on a home router. What is
 established is the causal direction, not the mechanism's numbers.
 
+### Prior art, and why it does not cover this
+
+Worth knowing what already exists before inventing anything.
+
+**BitTorrent solved the bandwidth version.** µTP with LEDBAT (RFC 6817) is a
+*scavenger* transport: it watches one-way delay and yields the moment anything
+else wants the link. It exists because BitTorrent was making home connections
+unusable — the same complaint, twenty years earlier.
+
+**IPFS/Kubo and libp2p solved the connection-count version.** Watermarked
+connection managers, resource managers with per-scope limits, and a `lowpower`
+profile, all added after nodes overwhelmed routers.
+
+**Neither covers what happened here**, and the reason is worth stating.
+
+Our transport (`libudx`) implements **BBR** — bandwidth and RTT based, with
+explicit pacing. BBR is deliberately *competitive*: it finds the bottleneck and
+takes its share. It is the opposite of a scavenger. But that is beside the
+point, because **congestion control is the wrong axis**. It governs how fast one
+stream sends; the failure here was how many flows exist. A LEDBAT-style
+transport would open exactly the same number of NAT entries and simply push
+fewer bytes through each.
+
+`dht-rpc` does already adapt. It drops background query concurrency from 10 to 2
+when its own requests pile up, under a comment that reads `// yield to other
+traffic`:
+
+```js
+q.on('data', () => {
+  // yield to other traffic
+  q.concurrency = this.io.inflight.length < 3 ? this.concurrency : backgroundCon
+})
+```
+
+**But "other traffic" means its own other queries.** It yields to itself.
+
+### The gap: nothing yields to other applications
+
+There is no mechanism by which a peer-to-peer app defers to *other processes*
+sharing a NAT, because **the signal is not observable from inside the process**.
+LEDBAT works because one-way delay is measurable end to end. There is no
+equivalent measurement for "the router's translation table is nearly full" —
+the kernel does not expose it, the router does not report it, and another
+application's flows are invisible.
+
+This has a consequence for design. An environmental heuristic — *am I behind a
+phone hotspot?* — is not a crude stand-in for a measurement we could take
+properly. **It may be the only signal available.** You cannot observe the table,
+so you infer it from where you are.
+
+That is the argument for detection (below) being load-bearing rather than a
+convenience, and for a user override on top: the person can see things about
+their situation that neither the process nor the platform can.
+
 ### The rule this implies
 
 **A peer-to-peer app on a shared constrained link has an obligation to the
