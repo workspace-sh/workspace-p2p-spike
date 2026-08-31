@@ -8,6 +8,10 @@ already ship in this repo, not as abstractions.
 remains is orchestration + the pairing-channel and recovery UX. Tracked
 in [#17](https://github.com/workspace-sh/workspace-p2p-spike/issues/17).
 
+The durability requirement below is not design — it is a rule learned
+from an implementation that broke, and it is normative
+([#38](https://github.com/workspace-sh/workspace-p2p-spike/issues/38)).
+
 Primitives in play:
 
 - **Wrapped keys** — X25519 seal to a recipient's key
@@ -25,6 +29,61 @@ Primitives in play:
 
 A device's identity is an ed25519 keypair whose public half is its
 `did:key`; the private half never leaves the device.
+
+### Where that private half lives — a durability requirement
+
+"Never leaves the device" is a confidentiality property. It says nothing
+about whether the key is still *there* tomorrow, and that turns out to be
+the harder half.
+
+**Identity storage must survive repackaging of the app that created it.**
+An identity that disappears when an app is renamed, re-signed, or shipped
+under a new identifier is not a device identity — it is an installation
+identity, and the protocol is entitled to assume otherwise.
+
+This is not hypothetical. It happened during Workspace implementation
+(workspace-sh/workspace#345): the macOS bundle identifier changed, the
+Keychain item became unreadable to the renamed app, and the device minted
+a fresh seed. New seed → new `did:key` → no envelope in any workspace was
+addressed to it any more. The folders were untouched and complete; the
+device had simply become a stranger to them.
+
+Per platform, the trap is the same shape:
+
+- **Apple** — a Keychain item belongs to the *signing app*. Surviving a
+  bundle-identifier change requires a `keychain-access-groups` entitlement
+  with a group scoped to the team rather than the app.
+- **Android** — Keystore aliases are scoped to the package name; a package
+  rename loses them identically.
+- **Anywhere** — storage keyed on an application identifier inherits that
+  identifier's lifetime. Application Support paths built from a bundle id
+  have exactly this problem, and that one is self-inflicted: the path is
+  the implementation's choice, not the platform's.
+
+### Failing to find an identity is not the same as not having one
+
+A renamed app does not get an *error* from the keystore. It gets
+"not found" — byte-for-byte what a genuine first run gets. An
+implementation that mints on "not found" will silently re-identify a
+device that was already a member of things.
+
+**Implementations MUST distinguish the two.** A durable marker outside the
+keystore — recording that an identity was established, in storage that
+does not move — makes the difference observable. Marker present and
+keystore empty is identity *loss*: refuse to mint, and say so. Only the
+absence of both licenses a new identity.
+
+Refusing is not merely tidier. Minting produces a device that appears to
+work, syncs nothing, and gives no indication why — the failure is silent
+at every layer, which is the worst property a failure can have.
+
+### What recovery then means
+
+A device in this state is not broken and neither is the workspace. It is
+an *unlinked device holding a folder*, which §1 already covers: it needs
+an envelope sealed to its new DID. The remedy is an invitation, not a
+repair — and an implementation that has detected the loss can say exactly
+that.
 
 ---
 
