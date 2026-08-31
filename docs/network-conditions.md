@@ -97,6 +97,90 @@ Piggybacking Holepunch's infrastructure is the right default until measurement
 says it is insufficient. Our own becomes justified when we can point at a row
 in the table above that relaying does not fix.
 
+## Sharing the link — what we cost everything else
+
+Every row above measures what the network costs us. On a constrained link the
+more important number is the reverse: **what we cost every other application
+sharing it.**
+
+Observed during development, on a phone hotspot (`172.20.10.x`), while a
+workspace was open and syncing normally:
+
+- `git push` to github.com over HTTPS reset repeatedly.
+- `api.github.com` worked, then intermittently did not.
+- SSH to the same host worked throughout, uninterrupted.
+- Quitting the app restored the rest.
+
+That pattern is not filtering — filtering does not spare one protocol to the
+same host and then change its mind. It is the signature of **NAT table
+exhaustion**. A phone hotspot keeps a small translation table; the DHT plus
+hole-punching opens many short-lived UDP flows and evicts other applications'
+entries. SSH survived because it was one long-lived connection already
+established and refreshed.
+
+**Confirmed by stopping the app.** With a workspace open, `https://github.com`
+reset on every attempt for roughly an hour. With the app and its Metro process
+quit and nothing else changed:
+
+| probe | app running | app stopped |
+|---|---|---|
+| `https://github.com` | reset, every attempt | HTTP 200 in 0.39–0.44 s, three for three |
+| git `…/info/refs` | reset | HTTP 401 — a completed round trip |
+| GitHub API | reset intermittently | working |
+
+Flow count and table pressure during a join are **still unmeasured**, and
+should get a row of their own on a hotspot and on a home router. What is
+established is the causal direction, not the mechanism's numbers.
+
+### The rule this implies
+
+**A peer-to-peer app on a shared constrained link has an obligation to the
+other traffic on it.** Being local-first is not sufficient: an app that never
+blocks *its own* edits on the network, while making someone's video call
+unusable, has still failed the user. Bandwidth is not the scarce resource here
+— NAT table entries are, and they are shared with everything else the user is
+doing.
+
+This is the argument for connection *modes* rather than a single behaviour
+tuned for a good link.
+
+## Connection modes
+
+Three, distinguished by what the link can afford rather than by what it is:
+
+| mode | swarm behaviour | when |
+|---|---|---|
+| **Unrestricted** | Hyperswarm defaults. Announce, hole-punch, accept connections freely. | Ethernet, home Wi-Fi |
+| **Constrained** | Cap concurrent connections hard. Back off announces. Prefer existing connections over discovering new peers. Do not accept inbound. | Cellular, tethering, hotspot, Low Data Mode, and any link the user has flagged |
+| **Local-only** | No swarm at all. Logs open, edits work, nothing announces. | Offline, or the user's explicit choice |
+
+Two things make this tractable rather than theoretical:
+
+**The platform will tell us.** Apple's `NWPathMonitor` reports `isExpensive`
+(cellular or tethered) and `isConstrained` (Low Data Mode), and Android has
+equivalents in `ConnectivityManager`. Neither is a format concern — it is a
+per-platform input to a decision the runtime makes — but the *modes* should be
+specified here so every platform reaches the same behaviour.
+
+**Local-only must already work.** The rules above require that a workspace is
+readable and writable before any join is attempted, so local-only is not a
+degraded mode needing new code — it is the existing startup path with the join
+skipped. If that is not true, it is a bug in the app rather than a feature to
+build here.
+
+### What is still open
+
+- **Where the mode is decided.** The runtime, from a platform signal, or the
+  app, from a user setting? A user who says "this link is constrained" must be
+  able to override a platform that says otherwise — tethering is not always
+  reported as expensive.
+- **Whether constrained mode is enough.** If a capped swarm still exhausts a
+  hotspot's table, the honest answer is that local-only is the correct default
+  on such links, with syncing an explicit act.
+- **Whether the user is told.** Rule 3 above already asks the app to say which
+  state it is in. "Not syncing, because this connection is metered" is a
+  different sentence from "connecting", and only one of them is actionable.
+
 ## Adding a row
 
 ```ts
