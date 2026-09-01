@@ -15,12 +15,11 @@
 // are sealed under the relevant tier key before being appended; peers that
 // hold the key unseal on read. Without the key, blocks are opaque bytes.
 
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-
+import b4a from 'b4a';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const sodium = require('sodium-universal') as any;
+import sodiumModule from 'sodium-universal';
+
+const sodium = sodiumModule as any;
 
 const NONCE_BYTES = sodium.crypto_secretbox_NONCEBYTES as number;
 const KEY_BYTES = sodium.crypto_secretbox_KEYBYTES as number;
@@ -43,13 +42,13 @@ export function seal(plaintext: Uint8Array, key: Uint8Array): Uint8Array {
     throw new Error(`key must be ${KEY_BYTES} bytes, got ${key.length}`);
   }
 
-  const nonce = Buffer.alloc(NONCE_BYTES);
+  const nonce = b4a.alloc(NONCE_BYTES);
   sodium.randombytes_buf(nonce);
 
-  const cipher = Buffer.alloc(plaintext.length + MAC_BYTES);
-  sodium.crypto_secretbox_easy(cipher, Buffer.from(plaintext), nonce, Buffer.from(key));
+  const cipher = b4a.alloc(plaintext.length + MAC_BYTES);
+  sodium.crypto_secretbox_easy(cipher, b4a.from(plaintext), nonce, b4a.from(key));
 
-  const out = Buffer.alloc(NONCE_BYTES + cipher.length);
+  const out = b4a.alloc(NONCE_BYTES + cipher.length);
   nonce.copy(out, 0);
   cipher.copy(out, NONCE_BYTES);
   return new Uint8Array(out);
@@ -74,12 +73,12 @@ export function open(sealed: Uint8Array, key: Uint8Array): Uint8Array {
   const nonce = sealed.subarray(0, NONCE_BYTES);
   const cipher = sealed.subarray(NONCE_BYTES);
 
-  const plaintext = Buffer.alloc(cipher.length - MAC_BYTES);
+  const plaintext = b4a.alloc(cipher.length - MAC_BYTES);
   const ok = sodium.crypto_secretbox_open_easy(
     plaintext,
-    Buffer.from(cipher),
-    Buffer.from(nonce),
-    Buffer.from(key),
+    b4a.from(cipher),
+    b4a.from(nonce),
+    b4a.from(key),
   ) as boolean;
   if (!ok) {
     throw new Error('open failed — wrong key or tampered payload');

@@ -67,6 +67,12 @@ export interface Manifest {
     data: string;
     /** The live key delivery log (#9). */
     keyDelivery: string;
+    /**
+     * Binary content (#234). Optional: a workspace created before blob
+     * support has none, and opening one must keep working — writing a blob
+     * to it is what fails, with an explanation.
+     */
+    blobs?: string;
   };
 }
 
@@ -125,7 +131,7 @@ export interface CreateBundleInput {
   /** One envelope produced per recipient. */
   recipients: readonly RecipientInput[];
   /** Optional well-known log keys recorded in the manifest. */
-  logs?: { data: string; keyDelivery: string };
+  logs?: { data: string; keyDelivery: string; blobs?: string };
 }
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -469,3 +475,10 @@ export type {
   VerifyMembershipInput,
   MembershipVerdict,
 } from './membership.ts';
+
+export {
+  assertWorkspaceInvariants,
+  checkWorkspaceInvariants,
+  type CheckOptions,
+  type Violation,
+} from './conformance/invariants.ts';

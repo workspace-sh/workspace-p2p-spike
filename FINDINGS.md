@@ -3,8 +3,13 @@
 **Verdict: Go.**
 
 Hypercore is a viable P2P data layer for Workspace across Node, macOS,
-and (by extension) mobile. The permissions, addressing, and discovery
-layers on top are designed and partially implemented.
+iOS, Android and Linux. Mobile is no longer an extrapolation: the Bare
+worklet path runs on device, and the four packages below were extracted
+into the Workspace monorepo and have been developed there since.
+
+This repository is the public reference for the protocol. The code here
+is synced *from* the monorepo, not developed here — a reference that no
+longer matches the implementation is worse than no reference.
 
 ---
 
@@ -124,13 +129,24 @@ Project board: https://github.com/orgs/workspace-sh/projects/6
 
 ---
 
-## Extraction checklist (main monorepo)
+## Extraction: done
 
-1. Copy `packages/p2p-runtime` → Workspace monorepo as `@workspace.sh/p2p-runtime`.
-2. Copy `packages/ucan-boundary` → `@workspace.sh/ucan-boundary`.
-3. Copy `packages/portable-bootstrap` → `@workspace.sh/portable-bootstrap`.
-4. Add `apps/macos/native/P2PRuntimeModule.h` + `.mm` to the macOS Xcode target.
-5. Wire `runtime.macos.ts` export in the package — Metro resolves `.macos.ts` automatically.
-6. Set `childScriptPath` + `nodeBin` in the macOS app bootstrap.
-7. The mobile path is a separate spike — `react-native-bare-kit` replaces the NSTask path on iOS/Android.
-8. Lift the nine design docs into the main monorepo (or keep them in the spike repo with cross-references).
+All four packages live in the Workspace monorepo and are developed there.
+The macOS native module is on the Xcode target, `runtime.macos.ts` is
+wired, and the mobile path is no longer a separate spike —
+`react-native-bare-kit` replaces the NSTask path on iOS and Android, and
+a fourth client (GTK4 on Linux) consumes the same packages.
+
+The design docs stay here, and this is now the direction of travel: the
+monorepo is where the code changes, and this repository is synced from it
+so that the spec and the implementation cannot drift apart silently.
+
+Two divergences are deliberate, and exist so this repo stays clonable and
+runnable with no native toolchain and no app framework:
+
+- `packages/p2p-runtime/src/ambient.react-native.d.ts` declares the two
+  React Native symbols the macOS bridge imports, rather than taking a
+  react-native dependency for two files.
+- The sibling packages' `tsconfig.json` includes are widened to
+  `../p2p-runtime/src/*.d.ts`, so both ambient files are picked up when
+  those packages typecheck p2p-runtime sources.

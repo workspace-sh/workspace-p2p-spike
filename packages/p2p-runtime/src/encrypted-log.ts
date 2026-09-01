@@ -52,6 +52,9 @@ export function encryptedLog(log: Log, key: Uint8Array): Log {
     get length(): number {
       return log.length;
     },
+    get contiguousLength(): number | undefined {
+      return log.contiguousLength;
+    },
     append(block: Uint8Array): Promise<number> {
       return log.append(seal(block, k));
     },

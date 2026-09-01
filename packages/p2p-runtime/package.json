@@ -19,6 +19,34 @@
     "./spawned": {
       "types": "./src/runtime.spawned.ts",
       "default": "./src/runtime.spawned.ts"
+    },
+    "./ipc": {
+      "types": "./src/ipc/index.ts",
+      "default": "./src/ipc/index.ts"
+    },
+    "./ipc/framing": {
+      "types": "./src/ipc/framing.ts",
+      "default": "./src/ipc/framing.ts"
+    },
+    "./ipc/macos": {
+      "types": "./src/ipc/transport.macos.ts",
+      "default": "./src/ipc/transport.macos.ts"
+    },
+    "./ios": {
+      "types": "./src/runtime.ios.ts",
+      "default": "./src/runtime.ios.ts"
+    },
+    "./android": {
+      "types": "./src/runtime.android.ts",
+      "default": "./src/runtime.android.ts"
+    },
+    "./ipc/ios": {
+      "types": "./src/ipc/transport.ios.ts",
+      "default": "./src/ipc/transport.ios.ts"
+    },
+    "./shims/crypto": {
+      "types": "./src/shims/crypto.ts",
+      "default": "./src/shims/crypto.ts"
     }
   },
   "scripts": {

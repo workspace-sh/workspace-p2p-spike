@@ -1,12 +1,19 @@
-// Child worker. Wraps a NodeRuntime and serves the JSON-RPC protocol
-// (see ./protocol.ts) over stdin/stdout.
+// Child worker. Serves the JSON-RPC protocol (see ./protocol.ts) over whatever
+// byte channel the host hands it.
 //
-// The parent — whether a Node parent (tests + apps/node) or a future macOS
-// TurboModule parent — only ever sees the wire shape. The child code is
-// reused unchanged.
+// The parent — a Node parent (tests + apps/node), the macOS TurboModule
+// parent, or the in-process Bare host on iOS / Android — only ever sees the
+// wire shape. The child code is reused unchanged.
+//
+// The runtime is INJECTED rather than imported. This used to import
+// `NodeRuntime` directly, which quietly made every host a Node host: the Bare
+// worklet could not pack because the import dragged `node:*` builtins into a
+// graph that cannot resolve them (#229). Taking a factory keeps this file
+// honest about what it depends on — a `P2PRuntime`, not a particular host's
+// implementation of one — and matches the injection seam the rest of the
+// stack already uses (`RuntimeFactory`, `OpenWorkspaceFn`).
 
-import { NodeRuntime } from '../runtime.node.ts';
-import type { Log } from '../types.ts';
+import type { CreateRuntimeOptions, Log, P2PRuntime } from '../types.ts';
 import { encode, LineDecoder } from './framing.ts';
 import type {
   AppendBlockResult,
@@ -28,15 +35,23 @@ interface OpenLog {
   unsubscribe: () => void;
 }
 
+/**
+ * Creates a ready-to-use runtime. Supplied by the host so this module stays
+ * free of any particular host's imports.
+ */
+export type ChildRuntimeFactory = (opts: CreateRuntimeOptions) => Promise<P2PRuntime>;
+
 export class Child {
-  private runtime: NodeRuntime | null = null;
+  private runtime: P2PRuntime | null = null;
   private logs = new Map<Hex, OpenLog>();
   private decoder = new LineDecoder();
   private write: (s: string) => void;
+  private createRuntime: ChildRuntimeFactory;
   private shuttingDown = false;
 
-  constructor(write: (s: string) => void) {
+  constructor(write: (s: string) => void, createRuntime: ChildRuntimeFactory) {
     this.write = write;
+    this.createRuntime = createRuntime;
   }
 
   /** Feed a chunk read from stdin. Dispatches each complete message. */
@@ -63,8 +78,8 @@ export class Child {
         if (this.runtime) {
           return { did: this.runtime.did() } satisfies InitResult;
         }
-        this.runtime = new NodeRuntime({ storage: params.storage ?? undefined });
-        await this.runtime.ready();
+        // The factory returns a runtime that has already been readied.
+        this.runtime = await this.createRuntime({ storage: params.storage ?? undefined });
         return { did: this.runtime.did() } satisfies InitResult;
       }
       case 'did': {
@@ -136,7 +151,7 @@ export class Child {
     this.logs.set(log.key, { log, unsubscribe });
   }
 
-  private requireRuntime(): NodeRuntime {
+  private requireRuntime(): P2PRuntime {
     if (!this.runtime) throw new Error('runtime not initialised — send init first');
     return this.runtime;
   }

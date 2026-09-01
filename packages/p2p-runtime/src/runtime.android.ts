@@ -1,12 +1,30 @@
-// Android implementation — STUB. Filled in during Phase 2 of PLAN.md.
-// Same shape as runtime.ios.ts; both target react-native-bare-kit.
+// Android implementation of @workspace.sh/p2p-runtime.
+//
+// Identical to iOS: `react-native-bare-kit` runs the same Bare worklet, over
+// the same IPC byte channel, driving the same `SpawnedRuntime`. Bare ships
+// Tier 1 Android prebuilds (arm, arm64, ia32, x64).
+//
+// Re-exported rather than reimplemented so the two platforms cannot drift.
+// If they ever need to diverge, this file is the seam to open — but a
+// duplicate that starts identical is a duplicate that silently stops being so.
+//
+// The remaining Android-specific unknowns are not in this layer: Doze-mode
+// battery restrictions on background sync (docs/risks.md §2), and the
+// `bare-pack --target android` bundle differing from the iOS one.
 
-import type { CreateRuntimeOptions, P2PRuntime } from './types.ts';
+export {
+  createRuntime,
+  SpawnedRuntime,
+  BareTransport,
+  type BareWorklet,
+  type IOSRuntimeOptions as AndroidRuntimeOptions,
+} from './runtime.ios.ts';
 
-export async function createRuntime(_opts: CreateRuntimeOptions = {}): Promise<P2PRuntime> {
-  throw new Error(
-    '[@workspace.sh/p2p-runtime/android] not implemented yet — Phase 2 of PLAN.md (react-native-bare-kit + bare-pack)',
-  );
-}
-
-export type { P2PRuntime, Log, Did, TopicId, LogKey, CreateRuntimeOptions } from './types.ts';
+export type {
+  P2PRuntime,
+  Log,
+  Did,
+  TopicId,
+  LogKey,
+  CreateRuntimeOptions,
+} from './types.ts';

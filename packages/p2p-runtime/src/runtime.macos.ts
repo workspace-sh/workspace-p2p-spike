@@ -49,7 +49,6 @@ export async function createRuntime(opts: MacOSRuntimeOptions): Promise<P2PRunti
 
 export { SpawnedRuntime } from './ipc/parent.ts';
 export { MacOSTransport } from './ipc/transport.macos.ts';
-export type { MacOSRuntimeOptions };
 export type {
   P2PRuntime,
   Log,

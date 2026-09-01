@@ -16,7 +16,10 @@ export type {
 export { didFromSeed, didFromPublicKey, publicKeyFromDid, keyPairFromSeed } from './did.ts';
 export { wrap, unwrap, WRAP_OVERHEAD } from './wrap.ts';
 export { seal, open, SEAL_OVERHEAD, SEAL_KEY_BYTES } from './seal.ts';
+export { sha256, sha256Hex } from './hash.ts';
 export { encryptedLog } from './encrypted-log.ts';
+export { flushLogToDir, hydrateLogFromDir } from './transport-form.ts';
+export type { FlushResult, HydrateResult } from './transport-form.ts';
 export {
   sign,
   verify,

@@ -13,14 +13,14 @@
 // This replaces the spike placeholder (did:key:z<hex>) with a value that
 // ucanto will accept as a valid DID when building delegation chains.
 
-import { createRequire } from 'node:module';
+import b4a from 'b4a';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import hypercoreCryptoModule from 'hypercore-crypto';
 import type { Did } from './types.ts';
-
-const require = createRequire(import.meta.url);
 
 // hypercore-crypto is a transitive dep of corestore — always present.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const hypercoreCrypto = require('hypercore-crypto') as any;
+const hypercoreCrypto = hypercoreCryptoModule as any;
 
 // ---------------------------------------------------------------------------
 // base58btc — minimal implementation (no external dep needed)
@@ -126,9 +126,9 @@ export function keyPairFromSeed(seed: Uint8Array): {
   if (seed.length !== 32) {
     throw new Error(`seed must be 32 bytes, got ${seed.length}`);
   }
-  const kp = hypercoreCrypto.keyPair(Buffer.from(seed)) as {
-    publicKey: Buffer;
-    secretKey: Buffer;
+  const kp = hypercoreCrypto.keyPair(b4a.from(seed)) as {
+    publicKey: Uint8Array;
+    secretKey: Uint8Array;
   };
   return { publicKey: new Uint8Array(kp.publicKey), secretKey: new Uint8Array(kp.secretKey) };
 }

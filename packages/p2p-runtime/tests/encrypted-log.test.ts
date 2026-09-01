@@ -126,8 +126,8 @@ test('caller mutating the key buffer afterwards does not affect the wrapper', as
 // ---------------------------------------------------------------------------
 
 test('encrypted log replicates: B decrypts with the key, raw replica is ciphertext', async (t) => {
-  const a = new NodeRuntime({ storage: ':memory:' });
-  const b = new NodeRuntime({ storage: ':memory:' });
+  const a = new NodeRuntime({ storage: ':memory:', swarm: false });
+  const b = new NodeRuntime({ storage: ':memory:', swarm: false });
   await a.ready();
   await b.ready();
   const close = a.__pipeReplicate(b);
