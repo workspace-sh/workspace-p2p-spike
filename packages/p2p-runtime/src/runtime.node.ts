@@ -1,24 +1,40 @@
-// Node implementation of @workspace.sh/p2p-runtime.
+// The Hypercore implementation of @workspace.sh/p2p-runtime.
 //
 // Used directly by:
 //   - the apps/node smoke harness (Phase 1 of PLAN.md)
 //   - the spawned Node child process on the macOS RN-host path (Phase 3)
+//   - the Bare worklet on iOS / Android, which runs in-process rather than as
+//     a child (see ipc/worklet-bin.ts)
+//
+// Named `.node` for its original host, but deliberately host-AGNOSTIC: the
+// builtins below are imported unprefixed so this package's `imports` map can
+// swap them for their `bare-*` equivalents under Bare, and bytes go through
+// `b4a` rather than the `Buffer` global, which Bare does not have. Keeping one
+// runtime for both hosts is what makes the "same code below the byte channel"
+// claim actually true — it was not, before #229.
+//
+// Do NOT reintroduce `node:`-prefixed specifiers or `Buffer` here. Both work
+// fine under Node and both silently break the mobile bundle.
 //
 // Deliberately small: every public method maps to a single corestore /
 // hyperswarm call. The whole point of this package is that the consuming app
 // shouldn't care about Hypercore at all, only about logs and topics.
 
-import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-import { createRequire } from 'node:module';
+import { existsSync, mkdirSync, mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import Corestore from 'corestore';
 import Hyperswarm from 'hyperswarm';
 import b4a from 'b4a';
 import Protomux from 'protomux';
 import c from 'compact-encoding';
+// Derives the swarm keypair from the corestore primaryKey so the Noise
+// identity and the did:key identity are the same key (see ready()). Imported
+// statically rather than through `createRequire`, which has no Bare
+// equivalent; it is a direct dependency for that reason.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import hypercoreCryptoModule from 'hypercore-crypto';
 
 import type {
   ConnectionAuth,
@@ -30,13 +46,10 @@ import type {
   TopicId,
 } from './types.ts';
 import { didFromPublicKey } from './did.ts';
+import { flushLogToDir, hydrateLogFromDir } from './transport-form.ts';
 
-const require = createRequire(import.meta.url);
-// hypercore-crypto is a transitive dep of corestore — used to derive the
-// swarm keypair from the corestore primaryKey so the Noise identity and the
-// did:key identity are the same key (see ready()).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const hypercoreCrypto = require('hypercore-crypto') as any;
+const hypercoreCrypto = hypercoreCryptoModule as any;
 
 // How long to wait for a peer's membership proof before dropping a gated
 // connection. Generous — covers a slow handshake, well short of hanging.
@@ -67,6 +80,9 @@ class NodeLog implements Log {
   }
   get length(): number {
     return this.core.length;
+  }
+  get contiguousLength(): number {
+    return this.core.contiguousLength as number;
   }
 
   async append(block: Uint8Array): Promise<number> {
@@ -102,18 +118,25 @@ export class NodeRuntime implements P2PRuntime {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private store!: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private swarm!: any;
+  private swarm: any = null;
+  /** False makes this runtime local-only — see CreateRuntimeOptions.swarm. */
+  private wantSwarm = true;
   private storagePath: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private joinedTopics = new Map<string, any>();
   private logs = new Map<string, NodeLog>();
   private didCache: Did | null = null;
+  // Cold replicas used only to make flushing incremental — a rebuildable
+  // cache beside the main store, never inside a workspace folder.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private captureStore: any = null;
   private opened = false;
   private bootstrap: Array<{ host: string; port: number }> | undefined;
   private auth: ConnectionAuth | undefined;
   private identitySeed: Uint8Array | undefined;
 
   constructor(opts: CreateRuntimeOptions = {}) {
+    this.wantSwarm = opts.swarm !== false;
     const s = opts.storage;
     if (!s || s === ':memory:') {
       this.storagePath = mkdtempSync(join(tmpdir(), 'p2p-runtime-'));
@@ -139,7 +162,7 @@ export class NodeRuntime implements P2PRuntime {
     // deliberate: a fixed identitySeed is how a peer gets a deterministic DID.
     this.store = this.identitySeed
       ? new Corestore(this.storagePath, {
-          primaryKey: Buffer.from(this.identitySeed),
+          primaryKey: b4a.from(this.identitySeed),
           unsafe: true,
         })
       : new Corestore(this.storagePath);
@@ -153,30 +176,35 @@ export class NodeRuntime implements P2PRuntime {
     // makes topic-layer auth sound: a peer's authenticated connection key
     // matches the DID its membership UCAN is addressed to.
     const primaryKey = this.store.primaryKey as Uint8Array;
-    const keyPair = hypercoreCrypto.keyPair(Buffer.from(primaryKey)) as {
-      publicKey: Buffer;
-      secretKey: Buffer;
+    const keyPair = hypercoreCrypto.keyPair(b4a.from(primaryKey)) as {
+      publicKey: Uint8Array;
+      secretKey: Uint8Array;
     };
 
-    this.swarm = new Hyperswarm({
-      keyPair,
-      ...(this.bootstrap ? { bootstrap: this.bootstrap } : {}),
-    });
-    this.swarm.on('connection', (conn: unknown) => {
-      if (!this.auth) {
-        // Open swarm (default): every connection replicates immediately.
-        this.store.replicate(conn);
-        return;
-      }
-      // Gated: exchange + verify membership proofs before replicating.
-      this._gatedReplicate(conn).catch(() => {
-        try {
-          (conn as { destroy(err?: Error): void }).destroy(new Error('auth failed'));
-        } catch {
-          /* already gone */
-        }
+    // Local-only runtimes never build one. The keypair above is derived
+    // regardless, because the DID comes from the corestore primaryKey — the
+    // swarm merely reuses it as its Noise identity.
+    if (this.wantSwarm) {
+      this.swarm = new Hyperswarm({
+        keyPair,
+        ...(this.bootstrap ? { bootstrap: this.bootstrap } : {}),
       });
-    });
+      this.swarm.on('connection', (conn: unknown) => {
+        if (!this.auth) {
+          // Open swarm (default): every connection replicates immediately.
+          this.store.replicate(conn);
+          return;
+        }
+        // Gated: exchange + verify membership proofs before replicating.
+        this._gatedReplicate(conn).catch(() => {
+          try {
+            (conn as { destroy(err?: Error): void }).destroy(new Error('auth failed'));
+          } catch {
+            /* already gone */
+          }
+        });
+      });
+    }
 
     this.didCache = didFromPublicKey(keyPair.publicKey);
     this.opened = true;
@@ -271,9 +299,21 @@ export class NodeRuntime implements P2PRuntime {
     if (buf.length !== 32) {
       throw new Error(`Topic must be 32 bytes (64 hex chars), got ${buf.length} bytes`);
     }
+    // Deliberately after the length check: the existing validation tests pass
+    // a swarmless runtime a bad topic and assert the length message.
+    if (this.swarm === null) {
+      throw new Error(
+        'joinTopic requires a swarm — this runtime was created with `swarm: false` and is local-only',
+      );
+    }
     const discovery = this.swarm.join(buf, { server: true, client: true });
     this.joinedTopics.set(topic, discovery);
     await discovery.flushed();
+  }
+
+  /** See P2PRuntime.replicates — false when built with `swarm: false`. */
+  get replicates(): boolean {
+    return this.wantSwarm;
   }
 
   async leaveTopic(topic: TopicId): Promise<void> {
@@ -281,6 +321,26 @@ export class NodeRuntime implements P2PRuntime {
     if (!d) return;
     await d.destroy();
     this.joinedTopics.delete(topic);
+  }
+
+  private _captureStore(): unknown {
+    if (this.captureStore === null) {
+      this.captureStore = new Corestore(`${this.storagePath}-capture`);
+    }
+    return this.captureStore;
+  }
+
+  async flushLogToDir(key: LogKey, dir: string): Promise<{ written: number; length: number }> {
+    if (!this.opened) throw new Error('Runtime not ready');
+    return flushLogToDir(this.store, this._captureStore(), b4a.from(key, 'hex'), dir);
+  }
+
+  async hydrateLogFromDir(
+    key: LogKey,
+    dir: string,
+  ): Promise<{ applied: number; skipped: number; length: number }> {
+    if (!this.opened) throw new Error('Runtime not ready');
+    return hydrateLogFromDir(this.store, b4a.from(key, 'hex'), dir);
   }
 
   async close(): Promise<void> {
@@ -297,6 +357,14 @@ export class NodeRuntime implements P2PRuntime {
       } catch {
         /* ignore */
       }
+    }
+    if (this.captureStore) {
+      try {
+        await this.captureStore.close();
+      } catch {
+        /* ignore */
+      }
+      this.captureStore = null;
     }
     if (this.store) {
       try {

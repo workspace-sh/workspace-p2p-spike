@@ -18,7 +18,7 @@ const dec = new TextDecoder();
 const enc = new TextEncoder();
 
 async function fresh(): Promise<NodeRuntime> {
-  const r = new NodeRuntime({ storage: ':memory:' });
+  const r = new NodeRuntime({ storage: ':memory:', swarm: false });
   await r.ready();
   return r;
 }

@@ -22,6 +22,19 @@ export interface Log {
   readonly writable: boolean;
   /** Current length (in blocks) as observed locally. */
   readonly length: number;
+  /**
+   * Length of the verified prefix starting at block 0 — i.e. how far the log
+   * can be read without waiting on a peer.
+   *
+   * This differs from `length` whenever a block is missing or was rejected:
+   * hydrating a transport folder with a corrupt message file leaves exactly
+   * that shape. Reading past it blocks until some peer supplies the block,
+   * which for a local-only or offline log is forever.
+   *
+   * Optional so implementations without the notion (fakes, stubs) are
+   * unaffected; absent means "the whole log is readable".
+   */
+  readonly contiguousLength?: number;
 
   /** Append a single block. Returns the new length. Writable logs only. */
   append(block: Uint8Array): Promise<number>;
@@ -38,6 +51,13 @@ export interface Log {
 
 /** A P2P runtime — created once per app, owns identity + storage + swarm. */
 export interface P2PRuntime {
+  /**
+   * False when this runtime cannot replicate — created with `swarm: false`,
+   * or a platform stub. Callers should skip `joinTopic` rather than let it
+   * throw; absent means "yes", so existing runtimes are unaffected.
+   */
+  readonly replicates?: boolean;
+
   /** Resolves once the runtime is ready to serve calls. */
   ready(): Promise<void>;
 
@@ -55,6 +75,19 @@ export interface P2PRuntime {
 
   /** Leave a discovery topic. */
   leaveTopic(topic: TopicId): Promise<void>;
+
+  /**
+   * Flush a log to its transport-form directory
+   * (`.workspace/store/v1/<log-key>`) — workspace-format.md § `store/`,
+   * ADR 0003. Optional: implemented by runtimes that own a corestore.
+   */
+  flushLogToDir?(key: LogKey, dir: string): Promise<{ written: number; length: number }>;
+
+  /** Replay a transport-form directory into a log. Optional, as above. */
+  hydrateLogFromDir?(
+    key: LogKey,
+    dir: string,
+  ): Promise<{ applied: number; skipped: number; length: number }>;
 
   /** Tear down. After close() the runtime is unusable. */
   close(): Promise<void>;
@@ -87,6 +120,22 @@ export interface ConnectionAuth {
 
 /** Options passed to the per-platform factory. */
 export interface CreateRuntimeOptions {
+  /**
+   * Whether to stand up a Hyperswarm for peer discovery and replication.
+   * Defaults to true.
+   *
+   * When false the runtime is LOCAL-ONLY: logs, `did()`, flush and hydrate all
+   * work exactly as before, and `joinTopic` throws rather than silently doing
+   * nothing. `bootstrap` and `auth` have no effect.
+   *
+   * Worth turning off wherever nothing will replicate — the whole offline test
+   * suite, and any flush-only path. A Hyperswarm binds a UDP socket that
+   * survives `destroy()` (upstream, see #254), so a process that creates one
+   * cannot exit; and paying for a DHT node to copy a folder is waste even
+   * without that bug.
+   */
+  swarm?: boolean;
+
   /**
    * Storage location.
    * - On Node/macOS: a filesystem path. `:memory:` falls back to an OS tempdir.

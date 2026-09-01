@@ -10,11 +10,14 @@
 // stderr is `inherit`-friendly so debugging output from the child shows up
 // in the parent's terminal during development.
 
+import { createRuntime } from '../runtime.node.ts';
 import { Child } from './child.ts';
 
+// This entry point is the one that binds the runtime — `Child` itself takes it
+// as a parameter so the Bare worklet can bind a different one (#229).
 const child = new Child((s) => {
   process.stdout.write(s);
-});
+}, createRuntime);
 
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk: string) => {

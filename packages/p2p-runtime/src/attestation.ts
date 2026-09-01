@@ -15,14 +15,14 @@
 // used by ucanto's @noble/ed25519. Signatures produced here can be verified
 // by either implementation (and vice versa).
 
-import { createRequire } from 'node:module';
+import b4a from 'b4a';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import hypercoreCryptoModule from 'hypercore-crypto';
 import type { Did } from './types.ts';
 import { didFromPublicKey, publicKeyFromDid } from './did.ts';
 
-const require = createRequire(import.meta.url);
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const hypercoreCrypto = require('hypercore-crypto') as any;
+const hypercoreCrypto = hypercoreCryptoModule as any;
 
 // ---------------------------------------------------------------------------
 // Low-level: sign/verify arbitrary bytes with an ed25519 keypair
@@ -41,7 +41,7 @@ export function sign(message: Uint8Array, secretKey: Uint8Array): Uint8Array {
       `ed25519 secret key must be 64 bytes (sodium format: 32-byte seed + 32-byte pubkey), got ${secretKey.length}`,
     );
   }
-  const sig = hypercoreCrypto.sign(Buffer.from(message), Buffer.from(secretKey)) as Buffer;
+  const sig = hypercoreCrypto.sign(b4a.from(message), b4a.from(secretKey)) as Uint8Array;
   return new Uint8Array(sig);
 }
 
@@ -62,9 +62,9 @@ export function verify(
     throw new Error(`ed25519 signature must be 64 bytes, got ${signature.length}`);
   }
   return hypercoreCrypto.verify(
-    Buffer.from(message),
-    Buffer.from(signature),
-    Buffer.from(publicKey),
+    b4a.from(message),
+    b4a.from(signature),
+    b4a.from(publicKey),
   ) as boolean;
 }
 
@@ -107,7 +107,8 @@ export function buildAttestationPayload(p: AttestationPayload): Uint8Array {
   const canonical = `{"createdAt":${Math.floor(p.createdAt)},"formatVersion":${
     p.formatVersion
   },"workspaceId":${JSON.stringify(p.workspaceId)}}`;
-  return new TextEncoder().encode(canonical);
+  // b4a rather than TextEncoder: Bare has no such global (#243).
+  return b4a.from(canonical);
 }
 
 /**
