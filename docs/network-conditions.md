@@ -128,9 +128,43 @@ quit and nothing else changed:
 | git `…/info/refs` | reset | HTTP 401 — a completed round trip |
 | GitHub API | reset intermittently | working |
 
-Flow count and table pressure during a join are **still unmeasured**, and
-should get a row of their own on a hotspot and on a home router. What is
-established is the causal direction, not the mechanism's numbers.
+### Measured: two sockets, eighty peers
+
+The flow count is no longer unmeasured, and the first attempt at measuring it
+was wrong in a way worth recording.
+
+Counting **sockets** shows nothing. With a workspace open and syncing, the P2P
+child holds **two UDP sockets** — flat over thirty seconds, and total system UDP
+endpoints indistinguishable from baseline. On that evidence the app looks
+entirely innocent, which is what an earlier check concluded.
+
+It is the wrong metric. `udx` multiplexes; it does not open a socket per peer.
+**NAT entries key on the four-tuple**, so two local sockets talking to eighty
+remote endpoints is eighty entries. Capturing on the interface instead:
+
+| metric | value |
+|---|---|
+| local UDP sockets | **2** |
+| distinct remote endpoints (200 packets) | **69**, across 39 IPs |
+| distinct remote endpoints (800 packets) | **80** |
+| **new** endpoints between two nearby samples | **53** |
+
+One peer appeared five times on five different source ports — five entries for
+one relationship.
+
+An iPhone Personal Hotspot hands out a `/28` and keeps a translation table in
+the low hundreds. Fifty-plus new entries in a short window is real pressure
+against that.
+
+**What this establishes, and what it does not.** The mechanism is now measured:
+high endpoint count and high churn from a small socket count. Whether it *causes*
+the observed failures is still correlational — during this capture HTTPS was
+healthy (0.71 s), so the app was applying pressure without anything breaking.
+The earlier incident reproduced once and has not reproduced since.
+
+The honest position: the pressure is real and quantified; the failure threshold
+is not known, and the link is independently unstable enough that a single
+recovery-on-quit should not be read as proof.
 
 ### Prior art, and why it does not cover this
 
