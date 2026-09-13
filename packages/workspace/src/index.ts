@@ -182,7 +182,7 @@ export class Workspace {
       auth: {
         localProof,
         verify: (remotePublicKey, remoteProof) =>
-          verifyMembership({ proof: { ucan: remoteProof }, remotePublicKey, rootDid }).then(
+          verifyMembership({ proof: { ucan: remoteProof }, remotePublicKey, rootDid, resource }).then(
             (v) => v.ok,
           ),
       },
@@ -255,7 +255,7 @@ export class Workspace {
       auth: {
         localProof,
         verify: (remotePublicKey, remoteProof) =>
-          verifyMembership({ proof: { ucan: remoteProof }, remotePublicKey, rootDid }).then(
+          verifyMembership({ proof: { ucan: remoteProof }, remotePublicKey, rootDid, resource }).then(
             (v) => v.ok,
           ),
       },

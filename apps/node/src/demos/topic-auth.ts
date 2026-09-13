@@ -122,6 +122,7 @@ async function main(): Promise<void> {
           proof: { ucan: remoteProof },
           remotePublicKey,
           rootDid,
+          resource,
         });
         log(
           `    [${proofOwner}] connection from ${verdict.did?.slice(0, 24) ?? '?'}…: ` +
