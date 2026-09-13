@@ -58,6 +58,11 @@ export interface VerifyMembershipInput {
   remotePublicKey: Uint8Array;
   /** The workspace root DID — the canIssue authority the chain must reach. */
   rootDid: Did;
+  /**
+   * This workspace's resource URI (`workspace://v1/<id>`). The proof admits a
+   * peer only if the capability it grants names this resource.
+   */
+  resource: string;
   /** Override "now" in whole seconds — for tests. */
   now?: number;
   /**
@@ -89,6 +94,8 @@ export interface MembershipVerdict {
  *   3. Reject if the DID is revoked.
  *   4. Validate the delegation chain terminates at the workspace root and is
  *      unexpired (UCAN expiry is whole-seconds — handled by the boundary).
+ *   5. Require the granted capability to be a workspace capability on THIS
+ *      workspace's resource.
  *
  * Never throws on a bad proof — returns `{ ok: false, reason }`. A malformed
  * proof is a rejection, not an exception, so the caller's connection handler
@@ -131,6 +138,16 @@ export async function verifyMembership(
   });
   if (!validation.ok) {
     return { ok: false, reason: `UCAN validation failed: ${validation.error}` };
+  }
+
+  // A valid chain to the root proves the root granted something. It admits to
+  // this workspace only when what it grants is this workspace.
+  const { can, with: granted } = validation.capability;
+  if (granted !== input.resource || !can.startsWith('workspace/')) {
+    return {
+      ok: false,
+      reason: `proof grants ${can} on ${granted}, not a workspace capability on ${input.resource}`,
+    };
   }
 
   return { ok: true, did: peerDid, capability: validation.capability };
