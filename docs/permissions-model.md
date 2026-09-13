@@ -302,11 +302,20 @@ from encryption-layer access.
   (on the connection's shared Protomux, alongside replication) and calls
   the `verify` hook before replicating. Reject or timeout drops the
   connection.
-- `verifyMembership` (`@workspace.sh/portable-bootstrap`) is the decision:
-  it binds the presented UCAN's audience to the authenticated key,
-  checks revocation, and validates the chain to the workspace root. A
-  sniffed UCAN replayed on another peer's connection fails the audience
-  bind.
+- `verifyMembership` (`@workspace.sh/portable-bootstrap`) is the decision.
+  It admits a peer only when all of these hold:
+  - the presented UCAN's audience is the connection's authenticated key;
+  - every link in the chain carries a valid signature from the key its
+    issuer DID encodes, is delegated by the link above it, carries the
+    claimed capability, and is inside its expiry and not-before window;
+  - the chain ends at the workspace's root DID;
+  - the granted capability is a `workspace/` capability on this
+    workspace's own resource URI.
+
+  It also takes an `isRevoked` check for revoked DIDs. A sniffed UCAN
+  replayed on another peer's connection fails the audience bind; a
+  delegation that names the root as issuer but was signed by another key
+  fails the signature check.
 
 The remaining piece is **topic rotation** (point 2) — rotating the
 discovery topic alongside `K0_org` on departure so a revoked peer can't
@@ -414,9 +423,10 @@ address is never shared with the wider org.
   (`packages/p2p-runtime/src/wrap.ts`)
 - **Root attestation** — sign + verify over `(workspaceId, createdAt,
   formatVersion)` (`packages/p2p-runtime/src/attestation.ts`)
-- **UCAN boundary** — issueDelegation, validateDelegation with
-  canIssue override, serialise, whole-second expiry handling
-  (`packages/ucan-boundary`)
+- **UCAN boundary** — issueDelegation; validateDelegation verifying
+  every link's signature, delegation, capability and validity window up
+  to the declared root (canIssue override); serialise; whole-second
+  expiry handling (`packages/ucan-boundary`)
 - **Bootstrap envelopes** — bundle creation, consumption, JSON
   serialisation, tamper detection (`packages/portable-bootstrap`)
 - **Live key delivery log (#9)** — `publishDelivery` / `scanDeliveries`
