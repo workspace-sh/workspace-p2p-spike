@@ -348,12 +348,9 @@ async function manualValidate(
     };
   }
 
-  // Every link, the root's included. The names checked above are only what
-  // the token's author wrote: an issuer field saying the root is not the root
-  // saying so. What makes a link the issuer's is its signature, so each one is
-  // verified against the key its issuer DID encodes — without this, anyone can
-  // write the root's DID into a delegation to themselves and sign it with
-  // their own key (workspace-sh/workspace#429).
+  // Every link, the root's included, is verified against the key its issuer
+  // DID encodes. The names compared above are what the token's author wrote;
+  // the signature is what makes a link its issuer's.
   for (let i = 0; i < chain.length; i++) {
     const link = chain[i];
     const linkIssuerDid: Did = link.issuer.did() as Did;

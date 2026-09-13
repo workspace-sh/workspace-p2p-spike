@@ -292,7 +292,7 @@ test('principalFromSeed rejects seeds of wrong length', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Signatures — a name in the issuer field is not the issuer (workspace-sh/workspace#429)
+// Signatures — a link belongs to the key that signed it
 // ---------------------------------------------------------------------------
 
 /**

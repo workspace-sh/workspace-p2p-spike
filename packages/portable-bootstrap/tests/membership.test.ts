@@ -184,9 +184,8 @@ test('wrong root: a UCAN delegated by a non-root issuer is rejected', async () =
   assert.match(verdict.reason!, /validation failed/);
 });
 
-// The test above is the honest outsider, who names themselves as issuer. The
-// dishonest one writes the root's DID into the issuer field and signs with
-// their own key; only the signature tells the two apart (workspace-sh/workspace#429).
+// A proof whose issuer field names the real root is accepted only if the root
+// signed it; one signed with any other key is rejected.
 test('forged root: a UCAN naming the real root as issuer but signed by another key is rejected', async () => {
   const { root, proofFor } = await fixture();
   const eveKp = seededKey(3);
