@@ -289,6 +289,24 @@ For each changed file, Workspace:
 This is the same write path as in-app edits — the only difference
 is where the new content comes from (disk vs the app's UI).
 
+### Paths stay inside the folder
+
+Log entries come from other peers, and every client joins an entry's
+path to its own folder to write it. So:
+
+- A document entry's path is workspace-relative: `/`-separated names,
+  with no empty, `.` or `..` segment, and no leading `/`, drive letter,
+  backslash or NUL. An entry with any other path is not a document entry
+  and stays out of the fold.
+- Writing the log back to the folder resolves each destination through
+  symbolic links first, and a write that would land outside the folder
+  is not made. That includes a link to a name that does not exist yet,
+  since writing through it would create the file it names.
+
+Implemented: the path rule in `@workspace.sh/core`'s entry decoder,
+which every client uses; the destination check in the Linux client.
+Which links *reading* follows is #48.
+
 ### Per-format reconciliation, not raw byte sync
 
 External edits are not blind byte-for-byte writes to the log. Each
