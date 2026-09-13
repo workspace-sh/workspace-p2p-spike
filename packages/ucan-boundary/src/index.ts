@@ -17,7 +17,7 @@
 // Internal complexity (ucanto specifics, the validator's invocation model,
 // signature/algorithm choices) stays in this file.
 
-import { delegate, Delegation } from '@ucanto/core';
+import { delegate, Delegation, UCAN } from '@ucanto/core';
 import * as ed25519 from '@ucanto/principal/ed25519';
 
 // ---------------------------------------------------------------------------
@@ -287,10 +287,25 @@ export async function validateDelegation(
 }
 
 /**
- * Manual chain walker. Each link must be signed by the previous link's
- * audience; the terminating issuer must equal `rootForResource(uri)` (or, if
- * that returns null, must equal the issuer of the capability itself per
- * ucanto's default).
+ * Whether a link carries a valid signature from the key its issuer DID names.
+ * An issuer DID that isn't an ed25519 `did:key` can't verify, so it fails.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function signatureVerifies(link: any): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const verifier = (ed25519 as any).Verifier.parse(link.issuer.did());
+    return (await UCAN.verifySignature(link.data, verifier)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Manual chain walker. Every link must be signed by its issuer, and each
+ * link's issuer must be the audience of the link above it; the terminating
+ * issuer must equal `rootForResource(uri)` (or, if that returns null, must
+ * equal the issuer of the capability itself per ucanto's default).
  */
 async function manualValidate(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -333,17 +348,31 @@ async function manualValidate(
     };
   }
 
-  // Each non-root link's issuer must equal the previous link's audience.
-  for (let i = 0; i < chain.length - 1; i++) {
+  // Every link, the root's included. The names checked above are only what
+  // the token's author wrote: an issuer field saying the root is not the root
+  // saying so. What makes a link the issuer's is its signature, so each one is
+  // verified against the key its issuer DID encodes — without this, anyone can
+  // write the root's DID into a delegation to themselves and sign it with
+  // their own key (workspace-sh/workspace#429).
+  for (let i = 0; i < chain.length; i++) {
     const link = chain[i];
-    const parent = chain[i + 1];
     const linkIssuerDid: Did = link.issuer.did() as Did;
-    const parentAudienceDid: Did = parent.audience.did() as Did;
-    if (linkIssuerDid !== parentAudienceDid) {
+    if (!(await signatureVerifies(link))) {
       return {
         ok: false,
-        error: `chain break at depth ${i}: ${linkIssuerDid} not delegated by ${parentAudienceDid}`,
+        error: `chain link at depth ${i} is not signed by its issuer ${linkIssuerDid}`,
       };
+    }
+    // Each link must be delegated by the one above it.
+    const parent = chain[i + 1];
+    if (parent !== undefined) {
+      const parentAudienceDid: Did = parent.audience.did() as Did;
+      if (linkIssuerDid !== parentAudienceDid) {
+        return {
+          ok: false,
+          error: `chain break at depth ${i}: ${linkIssuerDid} not delegated by ${parentAudienceDid}`,
+        };
+      }
     }
     // Each link must declare the same capability (no capability escalation).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -354,9 +383,12 @@ async function manualValidate(
         error: `chain link at depth ${i} does not carry the claimed capability`,
       };
     }
-    // Expiry: each link must not be expired.
+    // Each link must be inside its validity window.
     if (link.expiration !== undefined && link.expiration !== null && link.expiration <= now) {
       return { ok: false, error: `chain link at depth ${i} is expired` };
+    }
+    if (link.notBefore !== undefined && link.notBefore !== null && now < link.notBefore) {
+      return { ok: false, error: `chain link at depth ${i} is not yet valid` };
     }
   }
 

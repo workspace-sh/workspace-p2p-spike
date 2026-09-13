@@ -184,6 +184,29 @@ test('wrong root: a UCAN delegated by a non-root issuer is rejected', async () =
   assert.match(verdict.reason!, /validation failed/);
 });
 
+// The test above is the honest outsider, who names themselves as issuer. The
+// dishonest one writes the root's DID into the issuer field and signs with
+// their own key; only the signature tells the two apart (workspace-sh/workspace#429).
+test('forged root: a UCAN naming the real root as issuer but signed by another key is rejected', async () => {
+  const { root, proofFor } = await fixture();
+  const eveKp = seededKey(3);
+  const eve = await principalFromSeed(eveKp.secretKey.subarray(0, 32));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const eveSigner = (eve as any)._signer;
+  const posingAsRoot = { did: () => root.did(), _signer: eveSigner.withDID(root.did()) } as typeof root;
+
+  // Eve's own authenticated connection, presenting a proof addressed to her.
+  const proof = await proofFor(eve.did(), posingAsRoot);
+  const verdict = await verifyMembership({
+    proof,
+    remotePublicKey: eveKp.publicKey,
+    rootDid: root.did(),
+  });
+
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reason!, /not signed by its issuer/);
+});
+
 // ---------------------------------------------------------------------------
 // Malformed inputs are rejections, not exceptions
 // ---------------------------------------------------------------------------

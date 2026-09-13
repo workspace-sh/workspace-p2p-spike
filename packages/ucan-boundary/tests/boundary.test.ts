@@ -290,3 +290,105 @@ test('different seeds produce different DIDs', async () => {
 test('principalFromSeed rejects seeds of wrong length', async () => {
   await assert.rejects(() => principalFromSeed(new Uint8Array(31)), /32 bytes/);
 });
+
+// ---------------------------------------------------------------------------
+// Signatures — a name in the issuer field is not the issuer (workspace-sh/workspace#429)
+// ---------------------------------------------------------------------------
+
+/**
+ * A principal that writes `asDid` into the issuer field of what it signs, but
+ * signs with its own key — what anyone can do without the real key.
+ */
+function impersonating(signer: Principal, asDid: Did): Principal {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const own = (signer as any)._signer;
+  return { did: () => asDid, _signer: own.withDID(asDid) } as Principal;
+}
+
+test('signatures: a delegation naming the root as issuer but signed by another key is rejected', async () => {
+  const { alice, bob: eve } = await trio();
+  const forged = await issueDelegation({
+    issuer: impersonating(eve, alice.did()),
+    audience: eve.did(),
+    capabilities: [{ can: CAN_READ, with: WORKSPACE_URI }],
+    expiration: Math.floor(Date.now() / 1000) + 60,
+  });
+  assert.equal(forged.meta.issuer, alice.did(), 'the forgery names the root');
+
+  const direct = await validateDelegation(forged, { rootForResource: rootIs(alice.did()) });
+  assert.equal(direct.ok, false);
+  if (!direct.ok) assert.match(direct.error, /not signed by its issuer/);
+
+  // As it arrives off the wire.
+  const received = await validateDelegation(await fromBytes(await toBytes(forged)), {
+    rootForResource: rootIs(alice.did()),
+  });
+  assert.equal(received.ok, false);
+});
+
+test('signatures: a forged middle link breaks the chain even when the root link is genuine', async () => {
+  const { alice, bob, carol: eve } = await trio();
+  const exp = Math.floor(Date.now() / 1000) + 60;
+  const aliceToBob = await issueDelegation({
+    issuer: alice,
+    audience: bob.did(),
+    capabilities: [{ can: CAN_READ, with: WORKSPACE_URI }],
+    expiration: exp,
+  });
+  // Eve holds Bob's genuine proof (it travels in the clear) and signs as Bob.
+  const bobToEve = await issueDelegation({
+    issuer: impersonating(eve, bob.did()),
+    audience: eve.did(),
+    capabilities: [{ can: CAN_READ, with: WORKSPACE_URI }],
+    expiration: exp,
+    proofs: [aliceToBob],
+  });
+
+  const result = await validateDelegation(bobToEve, { rootForResource: rootIs(alice.did()) });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /depth 0 is not signed/);
+});
+
+test('signatures: a forged root link is caught when a genuine link is signed on top of it', async () => {
+  const { alice, bob: eve, carol } = await trio();
+  const exp = Math.floor(Date.now() / 1000) + 60;
+  const forgedRoot = await issueDelegation({
+    issuer: impersonating(eve, alice.did()),
+    audience: eve.did(),
+    capabilities: [{ can: CAN_READ, with: WORKSPACE_URI }],
+    expiration: exp,
+  });
+  const eveToCarol = await issueDelegation({
+    issuer: eve,
+    audience: carol.did(),
+    capabilities: [{ can: CAN_READ, with: WORKSPACE_URI }],
+    expiration: exp,
+    proofs: [forgedRoot],
+  });
+
+  const result = await validateDelegation(eveToCarol, { rootForResource: rootIs(alice.did()) });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /depth 1 is not signed/);
+});
+
+test('chains: an expired root link is rejected even when the leaf is current', async () => {
+  const { alice, bob, carol } = await trio();
+  const now = Math.floor(Date.now() / 1000);
+  const aliceToBob = await issueDelegation({
+    issuer: alice,
+    audience: bob.did(),
+    capabilities: [{ can: CAN_READ, with: WORKSPACE_URI }],
+    expiration: now - 10,
+  });
+  const bobToCarol = await issueDelegation({
+    issuer: bob,
+    audience: carol.did(),
+    capabilities: [{ can: CAN_READ, with: WORKSPACE_URI }],
+    expiration: now + 60,
+    proofs: [aliceToBob],
+  });
+
+  const result = await validateDelegation(bobToCarol, { rootForResource: rootIs(alice.did()) });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /depth 1 is expired/);
+});
