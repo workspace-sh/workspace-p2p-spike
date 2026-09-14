@@ -423,10 +423,11 @@ address is never shared with the wider org.
   (`packages/p2p-runtime/src/wrap.ts`)
 - **Root attestation** — sign + verify over `(workspaceId, createdAt,
   formatVersion)` (`packages/p2p-runtime/src/attestation.ts`)
-- **UCAN boundary** — issueDelegation; validateDelegation verifying
-  every link's signature, delegation, capability and validity window up
-  to the declared root (canIssue override); serialise; whole-second
-  expiry handling (`packages/ucan-boundary`)
+- **UCAN boundary** — UCAN 1.0 delegations through `iso-ucan`:
+  issueDelegation; validateDelegation verifying every link's signature,
+  delegation, subject, segment-bounded command, resource policy and
+  validity window up to the self-issued root; serialise; whole-second
+  expiry handling (`packages/ucan-boundary`, ADR 0001)
 - **Bootstrap envelopes** — bundle creation, consumption, JSON
   serialisation, tamper detection (`packages/portable-bootstrap`)
 - **Live key delivery log (#9)** — `publishDelivery` / `scanDeliveries`
