@@ -25,6 +25,7 @@ import {
   createEnvelope,
   publishDelivery,
   scanDeliveries,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
 } from '@workspace.sh/portable-bootstrap';
 
@@ -86,10 +87,10 @@ async function main(): Promise<void> {
     const alice = await principalFromSeed(aliceKp.secretKey.subarray(0, 32));
     const dave = await principalFromSeed(daveKp.secretKey.subarray(0, 32));
 
-    // workspaceId == root pubkey; Dave already knows it (he was handed the
-    // workspace URI / light bundle, which carries the root DID + topic, but
-    // no envelope for him yet).
-    const workspaceId = aliceKp.publicKey.toString('hex');
+    // The workspace id is the root DID's multibase key; Dave already knows it
+    // (he was handed the workspace URI / light bundle, which carries the root
+    // DID + topic, but no envelope for him yet).
+    const workspaceId = workspaceIdForRoot(alice.did());
     const resource = `workspace://v1/${workspaceId}`;
     const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
 
