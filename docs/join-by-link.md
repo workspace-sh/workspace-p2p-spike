@@ -353,9 +353,10 @@ Autobase's settled order:
 
 - **The review decision is an entry**, appended by someone holding the capability to
   make it, so every device computes the same document.
-- **Default while held:** hidden from the document and listed for admins to review.
-  **Decide:** hidden until kept (recommended, safe for a hostile removal) or shown
-  with a marker until reverted.
+- **While held:** hidden from the document and listed for admins to review; "keep"
+  is an admin entry that applies it. Decided (Leslie, 14 Sep 2026) as the simplest
+  to build. Showing held entries with a marker until reverted is in the backlog
+  (#54).
 - **"Concurrent" is decided by Autobase's signed order, not the writer's claim.** A
   removed writer's device can author entries that claim to predate the removal; an
   entry not in the indexer-signed order (`signedLength`) when the removal is signed
@@ -378,11 +379,18 @@ Autobase's settled order:
   only; the key is not rotated
   ([index.js](https://github.com/holepunchto/autopass/blob/main/index.js)). Keet is
   closed source and was not checked.
-- So the proven practice is "removal stops writing". Workspace goes one step
-  further with the two levers `permissions-model.md` already describes, built from
-  Hypercore primitives: a new key epoch (tagged by id) sealed to the remaining
-  members, and topic rotation. MLS needs a commit sequencer (RFC 9420 §14) and
-  BeeKEM is pre-alpha; neither is planned.
+- So the proven practice is "removal stops writing". Workspace locks a removed
+  device out:
+  1. **The gate refuses it.** Data flows only between online peers that admit each
+     other, so once members hold the revocation (workspace-sh/workspace#433) the
+     removed device receives nothing new from them. This is the lock.
+  2. **A new key epoch** (tagged by id) sealed to the remaining members, and **topic
+     rotation**, as `permissions-model.md` describes. These cover new data reaching
+     the removed device another way: a member device that has not yet synced the
+     revocation, or a folder copied afterwards. Later than 1.
+
+  MLS needs a commit sequencer (RFC 9420 §14) and BeeKEM is pre-alpha; neither is
+  planned.
 
 ### UCAN version
 
