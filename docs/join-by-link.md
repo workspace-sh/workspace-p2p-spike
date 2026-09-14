@@ -342,15 +342,28 @@ sources cited here.
 
 ### Removing a writer while they write
 
-Removal wins, and a write that landed during the removal is reverted: devices
-recompute the view when Autobase's order settles. Two guardrails:
+An entry from a writer who is being removed is treated by where it falls in
+Autobase's settled order:
 
-- **The cutoff is Autobase's signed order, not the writer's claim.** A removed
-  writer's device can author entries that claim to predate the removal. An entry
-  not in the indexer-signed order (`signedLength`) when the removal is signed is
-  not applied.
+| Entry | Outcome |
+|---|---|
+| Before the removal | Applied |
+| After the removal | Never applied |
+| Concurrent with the removal | **Held for review.** An admin keeps it (applied) or reverts it; the data may be useful and the writer not malicious |
+
+- **The review decision is an entry**, appended by someone holding the capability to
+  make it, so every device computes the same document.
+- **Default while held:** hidden from the document and listed for admins to review.
+  **Decide:** hidden until kept (recommended, safe for a hostile removal) or shown
+  with a marker until reverted.
+- **"Concurrent" is decided by Autobase's signed order, not the writer's claim.** A
+  removed writer's device can author entries that claim to predate the removal; an
+  entry not in the indexer-signed order (`signedLength`) when the removal is signed
+  is concurrent at best, never "before".
 - **No wall-clock checks inside `apply`.** UCAN expiry is checked when an entry is
   ingested, or by causal position, so every device computes the same view.
+- Keyhive takes the same shape: operations by later-revoked authors stay in the
+  history and pass through a visibility index.
 
 ### Key rotation on removal
 
