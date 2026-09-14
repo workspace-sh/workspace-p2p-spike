@@ -20,9 +20,14 @@
     "node": ">=22.6"
   },
   "dependencies": {
-    "@ucanto/core": "^10.4.6",
-    "@ucanto/principal": "^9.0.3",
-    "@ucanto/validator": "^9.0.3"
+    "@ipld/dag-cbor": "^9.2.5",
+    "@noble/ed25519": "^3.2.0",
+    "b4a": "^1.8.1",
+    "iso-base": "^4.4.0",
+    "iso-did": "^2.1.1",
+    "iso-signatures": "^0.5.1",
+    "iso-ucan": "^0.5.0",
+    "sodium-universal": "^5.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

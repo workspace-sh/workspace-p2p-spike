@@ -15,14 +15,14 @@
 // used by ucanto's @noble/ed25519. Signatures produced here can be verified
 // by either implementation (and vice versa).
 
-import { createRequire } from 'node:module';
+import b4a from 'b4a';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import hypercoreCryptoModule from 'hypercore-crypto';
 import type { Did } from './types.ts';
 import { didFromPublicKey, publicKeyFromDid } from './did.ts';
 
-const require = createRequire(import.meta.url);
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const hypercoreCrypto = require('hypercore-crypto') as any;
+const hypercoreCrypto = hypercoreCryptoModule as any;
 
 // ---------------------------------------------------------------------------
 // Low-level: sign/verify arbitrary bytes with an ed25519 keypair
@@ -41,7 +41,7 @@ export function sign(message: Uint8Array, secretKey: Uint8Array): Uint8Array {
       `ed25519 secret key must be 64 bytes (sodium format: 32-byte seed + 32-byte pubkey), got ${secretKey.length}`,
     );
   }
-  const sig = hypercoreCrypto.sign(Buffer.from(message), Buffer.from(secretKey)) as Buffer;
+  const sig = hypercoreCrypto.sign(b4a.from(message), b4a.from(secretKey)) as Uint8Array;
   return new Uint8Array(sig);
 }
 
@@ -62,9 +62,9 @@ export function verify(
     throw new Error(`ed25519 signature must be 64 bytes, got ${signature.length}`);
   }
   return hypercoreCrypto.verify(
-    Buffer.from(message),
-    Buffer.from(signature),
-    Buffer.from(publicKey),
+    b4a.from(message),
+    b4a.from(signature),
+    b4a.from(publicKey),
   ) as boolean;
 }
 
@@ -74,12 +74,23 @@ export function verify(
 
 /** The payload signed by the root DID. */
 export interface AttestationPayload {
-  /** Stable workspace identifier (e.g. a UUIDv4 or a content-derived hash). */
+  /** The workspace's identifier: its root DID's multibase key. */
   workspaceId: string;
   /** Workspace creation time, whole-seconds-since-epoch. */
   createdAt: number;
   /** `.workspace/` format version this attestation was issued under. */
   formatVersion: number;
+  /** The Hyperswarm topic peers meet on, 64 hex characters. */
+  topicId: string;
+  /** The Hypercore keys (hex) of the workspace's well-known logs. */
+  logs?: AttestedLogs;
+}
+
+/** The logs a manifest names, as the attestation signs them. */
+export interface AttestedLogs {
+  data: string;
+  keyDelivery: string;
+  blobs?: string;
 }
 
 /** A signed attestation, suitable for persistence and offline verification. */
@@ -97,17 +108,22 @@ export interface SignedAttestation {
 /**
  * Produce the canonical bytes for an attestation payload.
  *
- * Canonicalisation rule for v1: explicit field order (alphabetical), no
- * whitespace, UTF-8 encoded JSON. Sufficient because the payload shape is
- * fixed; if the payload ever grows nested or open-ended, switch to a proper
- * canonical-JSON or CBOR encoding.
+ * UTF-8 JSON with no whitespace and every object's keys in alphabetical
+ * order, written out field by field so the bytes never depend on the order a
+ * caller built the object in. Optional fields that are absent are left out.
  */
 export function buildAttestationPayload(p: AttestationPayload): Uint8Array {
-  // Explicit alphabetical key order — do NOT rely on object literal order.
-  const canonical = `{"createdAt":${Math.floor(p.createdAt)},"formatVersion":${
-    p.formatVersion
-  },"workspaceId":${JSON.stringify(p.workspaceId)}}`;
-  return new TextEncoder().encode(canonical);
+  const logs =
+    p.logs === undefined
+      ? ''
+      : `"logs":{${p.logs.blobs === undefined ? '' : `"blobs":${JSON.stringify(p.logs.blobs)},`}"data":${JSON.stringify(
+          p.logs.data,
+        )},"keyDelivery":${JSON.stringify(p.logs.keyDelivery)}},`;
+  const canonical = `{"createdAt":${Math.floor(p.createdAt)},"formatVersion":${p.formatVersion},${logs}"topicId":${JSON.stringify(
+    p.topicId,
+  )},"workspaceId":${JSON.stringify(p.workspaceId)}}`;
+  // b4a rather than TextEncoder: Bare has no such global (#243).
+  return b4a.from(canonical);
 }
 
 /**
@@ -135,10 +151,21 @@ export function signWorkspaceAttestation(
       workspaceId: payload.workspaceId,
       createdAt: Math.floor(payload.createdAt),
       formatVersion: payload.formatVersion,
+      topicId: payload.topicId,
+      ...(payload.logs === undefined ? {} : { logs: attestedLogs(payload.logs) }),
     },
     payloadBytes,
     signature,
     rootDid,
+  };
+}
+
+/** Only the fields the attestation signs, so a wider object signs the same bytes it stores. */
+function attestedLogs(logs: AttestedLogs): AttestedLogs {
+  return {
+    data: logs.data,
+    keyDelivery: logs.keyDelivery,
+    ...(logs.blobs === undefined ? {} : { blobs: logs.blobs }),
   };
 }
 

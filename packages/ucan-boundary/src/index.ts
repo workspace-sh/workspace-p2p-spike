@@ -1,24 +1,58 @@
 // @workspace.sh/ucan-boundary
 //
-// Single-file boundary module isolating every ucanto call. Other packages
-// import from here, not from @ucanto/* — so a future swap (e.g. to iso-ucan
-// once its revocation story matures) stays a 1-2 day job for the import
-// surface. See docs/ucan-prior-research.md for the rationale and the library
-// choice ADR.
+// The one module that touches a UCAN library. Other packages import from here,
+// never from `iso-ucan` or `iso-signatures`, so the library behind it can change
+// without their import surface changing.
+//
+// Tokens are UCAN 1.0 delegations (https://github.com/ucan-wg/delegation),
+// through `iso-ucan`. A capability this module is given as `{ can, with }`
+// becomes, in the token:
+//
+//   cmd  `/${can}`                          e.g. `/workspace/read`
+//   sub  the workspace root's DID           the authority the chain ends at
+//   pol  [["==", ".resource", with]]        the resource, as the spec asks
+//                                           external resources be expressed
 //
 // Public surface (all opaque to consumers):
 //   - generatePrincipal / principalFromSeed — identity material
-//   - didOf / didToPublicKey — DID encoding/decoding
-//   - issueDelegation — mint a signed UCAN
-//   - validateDelegation — verify a chain (with canIssue override)
+//   - didOf / didToPublicKey — DID encoding and decoding
+//   - issueDelegation — sign a delegation, optionally on top of a parent chain
+//   - validateDelegation — verify a chain back to the resource's root
 //   - toBytes / fromBytes — transport-friendly serialisation
-//   - WHOLE_SECOND_FLOOR — explicit name for the ucanto expiry gotcha
-//
-// Internal complexity (ucanto specifics, the validator's invocation model,
-// signature/algorithm choices) stays in this file.
+//   - WHOLE_SECOND_FLOOR — UCAN times are whole seconds
 
-import { delegate, Delegation, UCAN } from '@ucanto/core';
-import * as ed25519 from '@ucanto/principal/ed25519';
+import * as dagCbor from '@ipld/dag-cbor';
+import { hashes as ed25519Hashes } from '@noble/ed25519';
+import b4a from 'b4a';
+import { base64 } from 'iso-base/rfc4648';
+import { DIDKey } from 'iso-did/key';
+import { EdDSASigner } from 'iso-signatures/signers/eddsa.js';
+import { verify as verifyEd25519 } from 'iso-signatures/verifiers/eddsa.js';
+import { Resolver } from 'iso-signatures/verifiers/resolver.js';
+import { Delegation } from 'iso-ucan/delegation';
+import { validate as policyAllows } from 'iso-ucan/policy';
+import sodiumModule from 'sodium-universal';
+
+const sodium = sodiumModule;
+
+// Hashing and randomness come from sodium, never from the `crypto` global. This
+// module packs into the mobile Bare worklet, which has no `crypto`; left alone,
+// `@noble/ed25519` hashes with WebCrypto and `iso-ucan` draws nonces from it.
+// The hook is the one `@noble/ed25519` provides for exactly this, and the
+// instance set here is the one `iso-signatures` signs and verifies with.
+function sha512(message: Uint8Array): Uint8Array<ArrayBuffer> {
+  const digest = b4a.alloc(64);
+  sodium.crypto_hash_sha512(digest, message);
+  return digest;
+}
+ed25519Hashes.sha512 = sha512;
+ed25519Hashes.sha512Async = async (message) => sha512(message);
+
+function randomNonce(): Uint8Array {
+  const nonce = b4a.alloc(12);
+  sodium.randombytes_buf(nonce);
+  return nonce;
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -39,9 +73,8 @@ export interface Principal {
 }
 
 /**
- * Opaque handle to a UCAN delegation. Construct via issueDelegation; pass to
- * validateDelegation or toBytes. Consumers cannot inspect contents — they go
- * through the boundary.
+ * Opaque handle to a UCAN delegation and the chain beneath it. Construct via
+ * issueDelegation or fromBytes; pass to validateDelegation or toBytes.
  */
 export interface DelegationToken {
   /** Public-only metadata safe to inspect without breaking the boundary. */
@@ -61,7 +94,7 @@ export interface DelegationToken {
 export interface CapabilityDescriptor {
   /** e.g. "workspace/read", "table/edit" */
   readonly can: string;
-  /** Resource URI, e.g. "workspace://wid/path" */
+  /** Resource URI, e.g. "workspace://v1/<id>" */
   readonly with: string;
 }
 
@@ -71,20 +104,77 @@ export type ValidationResult =
   | { ok: false; error: string };
 
 /**
- * Override for ucanto's default authority termination.
- *
- * Default behaviour rejects chains whose root issuer does not match the
- * resource URI directly (ucanto assumes DID-as-resource, e.g.
- * `with: did:key:zABC…`). Workspace-style URIs like `workspace://wid/path/`
- * never satisfy that test, so chains never terminate without an override.
- *
- * Implement this to declare: "any capability whose `with` resolves to this
- * resource can be self-issued by the DID I return here."
- *
- * Return `null` if the resource has no authoritative root, in which case
- * the validator falls back to ucanto's default behaviour.
+ * The DID that is the root authority over a resource: the only principal whose
+ * self-issued delegation can start a chain granting it. Return `null` when the
+ * resource has no root this caller recognises, and every chain is refused.
  */
 export type RootForResource = (resourceUri: string) => Did | null;
+
+/** UCAN times are whole seconds; fractional values are floored. */
+export const WHOLE_SECOND_FLOOR = true;
+
+// ---------------------------------------------------------------------------
+// Internals
+// ---------------------------------------------------------------------------
+
+/** Leaf first: the token's own delegation, then each parent up to the root. */
+type Chain = readonly Delegation[];
+
+const verifierResolver = new Resolver({ Ed25519: verifyEd25519 });
+
+function wrap(signer: EdDSASigner): Principal {
+  return {
+    did: () => signer.toString() as Did,
+    _signer: signer,
+  };
+}
+
+function signerOf(principal: Principal): EdDSASigner {
+  return principal._signer as EdDSASigner;
+}
+
+function chainOf(token: DelegationToken): Chain {
+  return token._delegation as Chain;
+}
+
+function commandFor(can: string): string {
+  return `/${can}`;
+}
+
+/** The resource a delegation's policy names, or undefined if it names none. */
+function resourceOf(policy: unknown): string | undefined {
+  if (!Array.isArray(policy)) return undefined;
+  for (const statement of policy) {
+    if (Array.isArray(statement) && statement[0] === '==' && statement[1] === '.resource' && typeof statement[2] === 'string') {
+      return statement[2];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Whether a delegation for `parent` also grants `child`. Commands are
+ * `/`-separated: `/workspace` grants `/workspace/read`, never `/workspacefoo`,
+ * and `/` grants everything.
+ */
+function commandCovers(parent: string, child: string): boolean {
+  return parent === '/' || child === parent || child.startsWith(`${parent}/`);
+}
+
+function tokenFromChain(chain: Chain): DelegationToken {
+  const leaf = chain[0]!;
+  const resource = resourceOf(leaf.pol) ?? '';
+  return {
+    meta: {
+      issuer: leaf.iss.toString() as Did,
+      audience: leaf.aud.toString() as Did,
+      capabilities: [{ can: leaf.cmd.slice(1), with: resource }],
+      ...(leaf.exp !== null && leaf.exp !== undefined ? { expiration: leaf.exp } : {}),
+      ...(leaf.nbf !== undefined ? { notBefore: leaf.nbf } : {}),
+    },
+    _delegation: chain,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Principals
@@ -92,9 +182,7 @@ export type RootForResource = (resourceUri: string) => Did | null;
 
 /** Generate a fresh ed25519 keypair principal. */
 export async function generatePrincipal(): Promise<Principal> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const signer = await (ed25519 as any).generate();
-  return wrap(signer);
+  return wrap(await EdDSASigner.generate());
 }
 
 /**
@@ -107,22 +195,8 @@ export async function principalFromSeed(seed: Uint8Array): Promise<Principal> {
   if (seed.length !== 32) {
     throw new Error(`seed must be 32 bytes, got ${seed.length}`);
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const signer = await (ed25519 as any).derive(seed);
-  return wrap(signer);
+  return wrap(await EdDSASigner.generate(seed));
 }
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function wrap(signer: any): Principal {
-  return {
-    did: () => signer.did() as Did,
-    _signer: signer,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// DID decode — inverse of @workspace.sh/p2p-runtime's didFromSeed
-// ---------------------------------------------------------------------------
 
 /** Convenience: extract the DID from a principal. */
 export function didOf(p: Principal): Did {
@@ -137,13 +211,7 @@ export function didOf(p: Principal): Did {
  * the wrap.ts primitive).
  */
 export function didToPublicKey(did: Did): Uint8Array {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const verifier = (ed25519 as any).Verifier.parse(did);
-  // ed25519 Verifier serialises as: [multicodec varint (0xed 0x01, 2 bytes)] [32-byte key].
-  // The varint of 0xed (= 237) requires 2 bytes because its high bit is set.
-  // Matches @workspace.sh/p2p-runtime/did.ts's ED25519_PUB_MULTICODEC = [0xed, 0x01].
-  const tagged = verifier as Uint8Array;
-  return tagged.subarray(2);
+  return DIDKey.fromString(did).publicKey;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,76 +221,45 @@ export function didToPublicKey(did: Did): Uint8Array {
 export interface IssueOptions {
   readonly issuer: Principal;
   readonly audience: Did;
+  /** Exactly one: a UCAN 1.0 delegation carries one command. */
   readonly capabilities: readonly CapabilityDescriptor[];
-  /**
-   * Seconds since epoch. **Sub-second values floor to whole seconds** per
-   * ucanto convention — a TTL of 0.5s rounds to 0 and the delegation will be
-   * treated as expired immediately. Use WHOLE_SECOND_FLOOR as a reminder.
-   */
+  /** Seconds since epoch, floored. Omit for no expiry. */
   readonly expiration?: number;
-  /** Optional not-before timestamp (whole seconds since epoch). */
+  /** Optional not-before time, whole seconds since epoch. */
   readonly notBefore?: number;
-  /** Optional proof delegations for sub-delegation chains. */
+  /**
+   * The chain this delegation extends, for sub-delegation. The first token's
+   * chain is used; its root's subject becomes this delegation's subject.
+   */
   readonly proofs?: readonly DelegationToken[];
 }
 
-/**
- * Constant naming the ucanto expiry gotcha (whole-second floor). Reference
- * this in code that computes expirations from sub-second TTLs.
- */
-export const WHOLE_SECOND_FLOOR = true;
-
 export async function issueDelegation(opts: IssueOptions): Promise<DelegationToken> {
-  const expiration =
-    opts.expiration === undefined ? undefined : Math.floor(opts.expiration);
-  const notBefore =
-    opts.notBefore === undefined ? undefined : Math.floor(opts.notBefore);
+  if (opts.capabilities.length !== 1) {
+    throw new Error(`a delegation carries exactly one capability, got ${opts.capabilities.length}`);
+  }
+  const capability = opts.capabilities[0]!;
+  const parent = opts.proofs?.[0] ? chainOf(opts.proofs[0]) : [];
+  const root = parent.at(-1);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const audienceVerifier = (ed25519 as any).Verifier.parse(opts.audience);
+  const delegation = await Delegation.create({
+    iss: signerOf(opts.issuer),
+    aud: opts.audience,
+    sub: root ? root.sub : opts.issuer.did(),
+    cmd: commandFor(capability.can),
+    pol: [['==', '.resource', capability.with]],
+    nonce: randomNonce(),
+    // Null is "no expiry"; left undefined, the library would apply its own.
+    exp: opts.expiration === undefined ? null : Math.floor(opts.expiration),
+    ...(opts.notBefore === undefined ? {} : { nbf: Math.floor(opts.notBefore) }),
+    // Issuing is not validating: a delegation that is already expired can be
+    // made, and validateDelegation is what refuses it.
+    now: 0,
+    // iso-ucan types DIDs and policy selectors as template literals; these
+    // values are those shapes at runtime.
+  } as unknown as Parameters<typeof Delegation.create>[0]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const proofs = opts.proofs?.map((p) => (p as any)._delegation) ?? [];
-
-  const dlg = await delegate({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    issuer: (opts.issuer as any)._signer,
-    audience: audienceVerifier,
-    capabilities: opts.capabilities.map((c) => ({
-      can: c.can as `${string}/${string}`,
-      with: c.with as `${string}:${string}`,
-      // ucanto requires a non-empty tuple; we trust the caller to pass ≥ 1.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    })) as any,
-    ...(expiration !== undefined ? { expiration } : {}),
-    ...(notBefore !== undefined ? { notBefore } : {}),
-    ...(proofs.length > 0 ? { proofs } : {}),
-  });
-
-  return tokenFromDelegation(dlg);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function tokenFromDelegation(dlg: any): DelegationToken {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const d = dlg as any;
-  return {
-    meta: {
-      issuer: d.issuer.did() as Did,
-      audience: d.audience.did() as Did,
-      capabilities: d.capabilities.map(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (c: any): CapabilityDescriptor => ({ can: c.can, with: c.with }),
-      ),
-      ...(d.expiration !== undefined && d.expiration !== null
-        ? { expiration: d.expiration as number }
-        : {}),
-      ...(d.notBefore !== undefined && d.notBefore !== null
-        ? { notBefore: d.notBefore as number }
-        : {}),
-    },
-    _delegation: dlg,
-  };
+  return tokenFromChain([delegation, ...parent]);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,35 +267,31 @@ function tokenFromDelegation(dlg: any): DelegationToken {
 // ---------------------------------------------------------------------------
 
 export interface ValidateOptions {
-  /**
-   * Root-DID resolver. Returns the DID that's allowed to self-issue
-   * capabilities on a given resource URI. See RootForResource doc for the
-   * ucanto `canIssue` gotcha this addresses.
-   */
+  /** The root authority over the capability's resource. */
   readonly rootForResource: RootForResource;
-  /**
-   * Override "now" in whole seconds since epoch. Useful in tests; defaults to
-   * the current wall-clock.
-   */
+  /** Override "now" in whole seconds since epoch. Defaults to the clock. */
   readonly now?: number;
 }
 
 /**
- * Validate a delegation chain — verifies signatures, chain termination at the
- * declared root, expiry, and capability semantics.
+ * Validate a delegation chain for the capability its leaf grants.
  *
- * Returns the first capability validated; multi-capability validation is a
- * later concern (current usage is one capability per delegation).
+ * Every link, the root's included, must:
+ *   - carry a valid signature from the key its issuer DID encodes;
+ *   - be delegated by the link above it (its issuer is that link's audience);
+ *   - share the root's subject;
+ *   - have a command that covers the leaf's, at a segment boundary;
+ *   - have a policy that admits the leaf's resource;
+ *   - be inside its expiry and not-before window.
+ * And the root link must be self-issued (issuer is the subject) by the DID
+ * `rootForResource` names for the resource.
  */
 export async function validateDelegation(
   token: DelegationToken,
   opts: ValidateOptions,
 ): Promise<ValidationResult> {
-  if (token.meta.capabilities.length === 0) {
-    return { ok: false, error: 'delegation has no capabilities' };
-  }
-  const cap = token.meta.capabilities[0];
-  if (!cap) {
+  const capability = token.meta.capabilities[0];
+  if (!capability) {
     return { ok: false, error: 'delegation has no capabilities' };
   }
 
@@ -270,129 +303,60 @@ export async function validateDelegation(
     return { ok: false, error: 'delegation not yet valid' };
   }
 
-  // The validator runs against an invocation. We construct a synthetic one
-  // where the audience invokes their own capability — that exercises the
-  // chain ucanto's logic walks.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dlg = (token as any)._delegation;
+  const chain = chainOf(token);
+  const root = chain.at(-1)!;
+  const subject = root.sub as string | null;
+  const rootIssuer = root.iss.toString();
 
-  // v1 implementation: walk the chain manually and apply rootForResource at
-  // the terminating issuer. ucanto's `access()` validator is invocation-shaped
-  // — it expects the audience to invoke their capability — which is more
-  // machinery than we need here. Manual walking captures the gotcha
-  // (`canIssue` override for non-DID URIs) cleanly. If/when we move to a
-  // full invocation flow, swap this for `access()` with the same canIssue
-  // semantics; the public API stays unchanged.
-  return manualValidate(dlg, cap, opts.rootForResource, now);
-}
-
-/**
- * Whether a link carries a valid signature from the key its issuer DID names.
- * An issuer DID that isn't an ed25519 `did:key` can't verify, so it fails.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function signatureVerifies(link: any): Promise<boolean> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const verifier = (ed25519 as any).Verifier.parse(link.issuer.did());
-    return (await UCAN.verifySignature(link.data, verifier)) === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Manual chain walker. Every link must be signed by its issuer, and each
- * link's issuer must be the audience of the link above it; the terminating
- * issuer must equal `rootForResource(uri)` (or, if that returns null, must
- * equal the issuer of the capability itself per ucanto's default).
- */
-async function manualValidate(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  dlg: any,
-  cap: CapabilityDescriptor,
-  rootForResource: RootForResource,
-  now: number,
-): Promise<ValidationResult> {
-  // Walk the proof chain back to the root.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let current: any = dlg;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chain: any[] = [current];
-  while (current.proofs && current.proofs.length > 0) {
-    // ucanto proofs may be CIDs or full Delegations; here we expect inline
-    // delegations (constructed in-process via the proofs argument).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const next = current.proofs.find((p: any) => p && p.issuer && p.audience);
-    if (!next) break;
-    chain.push(next);
-    current = next;
-  }
-
-  // Top of chain (eldest) — its issuer should match rootForResource(cap.with).
-  const root = chain[chain.length - 1];
-  const rootIssuerDid: Did = root.issuer.did() as Did;
-  const expectedRoot = rootForResource(cap.with);
+  const expectedRoot = opts.rootForResource(capability.with);
   if (expectedRoot === null) {
-    // No declared root: fall back to ucanto's default (issuer == with as URI).
-    if (rootIssuerDid !== cap.with) {
-      return {
-        ok: false,
-        error: `chain does not terminate at declared root for ${cap.with} (issuer ${rootIssuerDid} ≠ resource URI)`,
-      };
-    }
-  } else if (rootIssuerDid !== expectedRoot) {
+    return { ok: false, error: `no root authority is known for ${capability.with}` };
+  }
+  if (rootIssuer !== expectedRoot || subject !== rootIssuer) {
     return {
       ok: false,
-      error: `chain does not terminate at ${expectedRoot} for ${cap.with} (root issuer was ${rootIssuerDid})`,
+      error: `chain does not terminate at ${expectedRoot} for ${capability.with} (root issuer was ${rootIssuer})`,
     };
   }
 
-  // Every link, the root's included, is verified against the key its issuer
-  // DID encodes. The names compared above are what the token's author wrote;
-  // the signature is what makes a link its issuer's.
+  const leafCommand = chain[0]!.cmd;
   for (let i = 0; i < chain.length; i++) {
-    const link = chain[i];
-    const linkIssuerDid: Did = link.issuer.did() as Did;
-    if (!(await signatureVerifies(link))) {
-      return {
-        ok: false,
-        error: `chain link at depth ${i} is not signed by its issuer ${linkIssuerDid}`,
-      };
+    const link = chain[i]!;
+    const issuer = link.iss.toString();
+
+    try {
+      // Re-decoded from its own bytes with the signature checked; `now: 0`
+      // leaves expiry to the checks below, which report it by depth.
+      await Delegation.from({ bytes: link.bytes, verifierResolver, now: 0 });
+    } catch {
+      return { ok: false, error: `chain link at depth ${i} is not signed by its issuer ${issuer}` };
     }
-    // Each link must be delegated by the one above it.
+
     const parent = chain[i + 1];
-    if (parent !== undefined) {
-      const parentAudienceDid: Did = parent.audience.did() as Did;
-      if (linkIssuerDid !== parentAudienceDid) {
-        return {
-          ok: false,
-          error: `chain break at depth ${i}: ${linkIssuerDid} not delegated by ${parentAudienceDid}`,
-        };
-      }
-    }
-    // Each link must declare the same capability (no capability escalation).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const linkCap = link.capabilities.find((c: any) => c.can === cap.can && c.with === cap.with);
-    if (!linkCap) {
+    if (parent !== undefined && issuer !== parent.aud.toString()) {
       return {
         ok: false,
-        error: `chain link at depth ${i} does not carry the claimed capability`,
+        error: `chain break at depth ${i}: ${issuer} not delegated by ${parent.aud.toString()}`,
       };
     }
-    // Each link must be inside its validity window.
-    if (link.expiration !== undefined && link.expiration !== null && link.expiration <= now) {
+    if ((link.sub as string | null) !== subject) {
+      return { ok: false, error: `chain link at depth ${i} names a different subject` };
+    }
+    if (!commandCovers(link.cmd, leafCommand) || !policyAllows({ resource: capability.with }, link.pol)) {
+      return { ok: false, error: `chain link at depth ${i} does not carry the claimed capability` };
+    }
+    if (link.exp !== null && link.exp !== undefined && link.exp <= now) {
       return { ok: false, error: `chain link at depth ${i} is expired` };
     }
-    if (link.notBefore !== undefined && link.notBefore !== null && now < link.notBefore) {
+    if (link.nbf !== undefined && now < link.nbf) {
       return { ok: false, error: `chain link at depth ${i} is not yet valid` };
     }
   }
 
   return {
     ok: true,
-    audience: dlg.audience.did() as Did,
-    capability: cap,
+    audience: token.meta.audience,
+    capability,
   };
 }
 
@@ -400,23 +364,35 @@ async function manualValidate(
 // Serialisation
 // ---------------------------------------------------------------------------
 
-/** Serialise a delegation to bytes for transport (e.g. inside a Hypercore block). */
+/**
+ * Serialise a delegation for transport (e.g. inside a Hypercore block): a
+ * DAG-CBOR array of its chain's envelopes, leaf first.
+ */
 export async function toBytes(token: DelegationToken): Promise<Uint8Array> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dlg = (token as any)._delegation;
-  const archive = await dlg.archive();
-  if (archive.error) {
-    throw new Error(`failed to archive delegation: ${String(archive.error)}`);
-  }
-  return archive.ok as Uint8Array;
+  return dagCbor.encode(chainOf(token).map((d) => d.bytes));
 }
 
-/** Restore a delegation from the bytes produced by `toBytes`. */
+/**
+ * Restore a delegation from the bytes produced by `toBytes`. Decoding checks
+ * shape only; validateDelegation is what checks signatures and times.
+ */
 export async function fromBytes(bytes: Uint8Array): Promise<DelegationToken> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extract = await (Delegation as any).extract(bytes);
-  if (extract.error) {
-    throw new Error(`failed to extract delegation: ${String(extract.error)}`);
+  let envelopes: unknown;
+  try {
+    envelopes = dagCbor.decode(bytes);
+  } catch (error) {
+    throw new Error(`failed to decode delegation: ${(error as Error).message}`);
   }
-  return tokenFromDelegation(extract.ok);
+  if (!Array.isArray(envelopes) || envelopes.length === 0 || !envelopes.every((e) => e instanceof Uint8Array)) {
+    throw new Error('failed to decode delegation: expected a non-empty array of envelopes');
+  }
+  const chain: Delegation[] = [];
+  for (const envelope of envelopes as Uint8Array[]) {
+    try {
+      chain.push(await Delegation.fromString(base64.encode(envelope), { now: 0 }));
+    } catch (error) {
+      throw new Error(`failed to decode delegation: ${(error as Error).message}`);
+    }
+  }
+  return tokenFromChain(chain);
 }

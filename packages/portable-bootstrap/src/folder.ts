@@ -18,8 +18,8 @@
 //
 // See docs/workspace-format.md for the full on-disk layout.
 
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, readdir, writeFile } from 'fs/promises';
+import { join } from 'path';
 
 import {
   serialiseBundle,

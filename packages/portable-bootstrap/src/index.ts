@@ -1,7 +1,7 @@
 // @workspace.sh/portable-bootstrap
 //
 // Bundles a Workspace as a portable folder (or archive of one) carrying:
-//   - a manifest binding workspaceId + createdAt + rootDid
+//   - a manifest binding workspaceId + createdAt + rootDid + topicId + log keys
 //   - a root attestation signed by the rootDid (defeats tampering + replay)
 //   - per-recipient bootstrap envelopes ({ucan, wrappedKey, resource} sealed
 //     to each recipient's DID)
@@ -19,6 +19,7 @@
 import {
   wrap,
   unwrap,
+  sha256Hex,
   signWorkspaceAttestation,
   verifyWorkspaceAttestation,
   publicKeyFromDid,
@@ -43,31 +44,66 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface Manifest {
-  /** Schema version of the manifest itself. Currently 1. */
+  /** Version of the `.workspace/` format. `FORMAT_VERSION` for anything this code writes. */
   formatVersion: number;
-  /** Stable identifier for the workspace (e.g. UUID, content hash). */
+  /**
+   * The workspace's identifier: the root DID's multibase key, `rootDid`
+   * without its `did:key:` prefix (`uri-scheme.md` § The workspace
+   * identifier). It is what a `workspace://v1/<id>` link carries.
+   */
   workspaceId: string;
   /** Creation time, whole-seconds-since-epoch. */
   createdAt: number;
   /** `did:key:z…` of the workspace's root. Subject of the attestation. */
   rootDid: Did;
   /**
+   * The Hyperswarm topic peers meet on, hex. A new workspace's is SHA-256 of
+   * the root's 32-byte public key, the topic `uri-scheme.md` derives from a
+   * link. Peers join the topic the signed manifest names.
+   */
+  topicId: string;
+  /**
    * Hypercore public keys (hex) for the workspace's well-known logs, so a
    * peer opening the bundle can find them without an out-of-band exchange.
-   * Optional for back-compat.
-   *
-   * NOTE: not yet covered by the root attestation (which signs workspaceId +
-   * createdAt + formatVersion). Tampering a log key points a reader at a
-   * different log, but content stays sealed under the tier keys — a
-   * denial/confusion vector, not a confidentiality break. Extending the
-   * attestation payload to cover these is a tracked follow-up.
+   * Signed by the attestation along with every other field here.
    */
   logs?: {
     /** The workspace's primary data log. */
     data: string;
     /** The live key delivery log (#9). */
     keyDelivery: string;
+    /** Binary content (#234). */
+    blobs?: string;
   };
+}
+
+/** The `.workspace/` format version this code writes and opens. */
+export const FORMAT_VERSION = 2;
+
+const DID_KEY_PREFIX = 'did:key:';
+
+/**
+ * The workspace id a root DID makes: its multibase key.
+ *
+ * Throws for anything but an ed25519 `did:key`, the only root this format has.
+ */
+export function workspaceIdForRoot(rootDid: Did): string {
+  rootPublicKey(rootDid);
+  return rootDid.slice(DID_KEY_PREFIX.length);
+}
+
+/** The Hyperswarm topic a root DID makes: SHA-256 of its 32-byte public key, hex. */
+export function topicIdForRoot(rootDid: Did): string {
+  return sha256Hex(rootPublicKey(rootDid));
+}
+
+function rootPublicKey(rootDid: Did): Uint8Array {
+  // publicKeyFromDid rejects every other method and key type.
+  const key = publicKeyFromDid(rootDid);
+  if (key.length !== 32) {
+    throw new Error(`a workspace root must be an ed25519 did:key, got ${rootDid}`);
+  }
+  return key;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,19 +149,16 @@ export interface RecipientInput {
 }
 
 export interface CreateBundleInput {
-  workspaceId: string;
   /** Defaults to `Math.floor(Date.now() / 1000)`. */
   createdAt?: number;
-  /** Defaults to 1. */
-  formatVersion?: number;
-  /** Root principal — its DID becomes the workspace's root identity. */
+  /** Root principal. Its DID is the workspace's identity: the id and topic come from it. */
   root: Principal;
   /** Root's 64-byte ed25519 secret key for signing the attestation. */
   rootSecretKey: Uint8Array;
   /** One envelope produced per recipient. */
   recipients: readonly RecipientInput[];
   /** Optional well-known log keys recorded in the manifest. */
-  logs?: { data: string; keyDelivery: string };
+  logs?: { data: string; keyDelivery: string; blobs?: string };
 }
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -175,12 +208,9 @@ export async function createEnvelope(
  * serialising and writing to wherever (`.workspace/` directory, archive, etc.).
  */
 export async function createBundle(input: CreateBundleInput): Promise<Bundle> {
-  const formatVersion = input.formatVersion ?? 1;
   const createdAt = Math.floor(input.createdAt ?? Date.now() / 1000);
   const rootDid = input.root.did();
 
-  // Sanity: rootSecretKey's embedded pubkey must agree with input.root's DID.
-  // (Catches the easy mistake of mixing up two keypairs at creation time.)
   if (input.rootSecretKey.length !== 64) {
     throw new Error(
       `rootSecretKey must be 64 bytes (sodium format), got ${input.rootSecretKey.length}`,
@@ -188,19 +218,27 @@ export async function createBundle(input: CreateBundleInput): Promise<Bundle> {
   }
 
   const manifest: Manifest = {
-    formatVersion,
-    workspaceId: input.workspaceId,
+    formatVersion: FORMAT_VERSION,
+    workspaceId: workspaceIdForRoot(rootDid),
     createdAt,
     rootDid,
+    topicId: topicIdForRoot(rootDid),
     ...(input.logs ? { logs: input.logs } : {}),
   };
 
   const attestationPayload: AttestationPayload = {
-    workspaceId: input.workspaceId,
+    workspaceId: manifest.workspaceId,
     createdAt,
-    formatVersion,
+    formatVersion: FORMAT_VERSION,
+    topicId: manifest.topicId,
+    ...(manifest.logs ? { logs: manifest.logs } : {}),
   };
   const attestation = signWorkspaceAttestation(attestationPayload, input.rootSecretKey);
+  // The attestation names the key that signed it. Signed with a different
+  // root's key, the bundle could never be opened.
+  if (attestation.rootDid !== rootDid) {
+    throw new Error('rootSecretKey is not the root principal\'s key');
+  }
 
   // Each recipient gets one sealed envelope. Same atom the live key delivery
   // log appends one-at-a-time — see createEnvelope.
@@ -317,22 +355,37 @@ export async function consumeBundle(
     );
   }
 
+  if (bundle.manifest.formatVersion !== FORMAT_VERSION) {
+    throw new Error(
+      `this workspace is format ${String(bundle.manifest.formatVersion)}, and this version of Workspace opens format ${FORMAT_VERSION} — recreate it`,
+    );
+  }
+
   // Step 1: verify attestation. Without this, nothing in the bundle is
   // trustworthy — any field could have been tampered with after distribution.
   if (!verifyWorkspaceAttestation(bundle.attestation)) {
     throw new Error('bundle attestation verification failed — refusing to proceed');
   }
-  // Attestation's payload must match the manifest. Otherwise the attestation
-  // is for a different workspace and the manifest cannot be trusted.
+  // Every field the manifest carries must be the one the root signed.
+  // Otherwise the attestation is for a different workspace, or the manifest
+  // points somewhere the root never did.
+  const signed = bundle.attestation.payload;
+  const { manifest } = bundle;
   if (
-    bundle.attestation.payload.workspaceId !== bundle.manifest.workspaceId ||
-    bundle.attestation.payload.createdAt !== bundle.manifest.createdAt ||
-    bundle.attestation.payload.formatVersion !== bundle.manifest.formatVersion ||
-    bundle.attestation.rootDid !== bundle.manifest.rootDid
+    signed.workspaceId !== manifest.workspaceId ||
+    signed.createdAt !== manifest.createdAt ||
+    signed.formatVersion !== manifest.formatVersion ||
+    signed.topicId !== manifest.topicId ||
+    !sameLogs(signed.logs, manifest.logs) ||
+    bundle.attestation.rootDid !== manifest.rootDid
   ) {
     throw new Error(
       'bundle attestation payload does not match manifest — refusing to proceed',
     );
+  }
+  // The id is the root's own key, not a value the root chose.
+  if (manifest.workspaceId !== workspaceIdForRoot(manifest.rootDid)) {
+    throw new Error('the workspace id is not its root DID\'s key — refusing to proceed');
   }
 
   // Step 2: find envelope.
@@ -360,6 +413,11 @@ export async function consumeBundle(
     rootDid: bundle.manifest.rootDid,
     mine,
   };
+}
+
+function sameLogs(a: Manifest['logs'], b: Manifest['logs']): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.data === b.data && a.keyDelivery === b.keyDelivery && a.blobs === b.blobs;
 }
 
 // ---------------------------------------------------------------------------
@@ -469,3 +527,10 @@ export type {
   VerifyMembershipInput,
   MembershipVerdict,
 } from './membership.ts';
+
+export {
+  assertWorkspaceInvariants,
+  checkWorkspaceInvariants,
+  type CheckOptions,
+  type Violation,
+} from './conformance/invariants.ts';

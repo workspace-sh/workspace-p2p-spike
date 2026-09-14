@@ -14,6 +14,7 @@ import {
   createEnvelope,
   createMembershipProof,
   verifyMembership,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
 } from '../src/index.ts';
 
@@ -37,7 +38,7 @@ const dummyKey = new Uint8Array(32); // membership cares about the UCAN, not the
 async function fixture() {
   const rootKp = seededKey(1);
   const root = await principalFromSeed(rootKp.secretKey.subarray(0, 32));
-  const workspaceId = rootKp.publicKey.toString('hex');
+  const workspaceId = workspaceIdForRoot(root.did());
   const resource = `workspace://v1/${workspaceId}`;
   const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
 
@@ -198,7 +199,10 @@ test('forged root: a UCAN naming the real root as issuer but signed by another k
   const eve = await principalFromSeed(eveKp.secretKey.subarray(0, 32));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const eveSigner = (eve as any)._signer;
-  const posingAsRoot = { did: () => root.did(), _signer: eveSigner.withDID(root.did()) } as typeof root;
+  const posingAsRoot = {
+    did: () => root.did(),
+    _signer: { toString: () => root.did(), signatureType: eveSigner.signatureType, sign: (m: Uint8Array) => eveSigner.sign(m) },
+  } as typeof root;
 
   // Eve's own authenticated connection, presenting a proof addressed to her.
   const proof = await proofFor(eve.did(), posingAsRoot);

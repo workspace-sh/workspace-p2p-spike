@@ -21,7 +21,23 @@
 // internals): Autobase multi-writer (#11), the document/section model, and
 // `workspace://` join.
 
-import { createHash } from 'node:crypto';
+// Randomness via sodium rather than `node:crypto` or the `crypto` global, so
+// this module packs into a Bare worklet for the mobile path (#229).
+import b4a from 'b4a';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import sodiumModule from 'sodium-universal';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sodium = sodiumModule as any;
+
+import { readBlob, writeBlob, type BlobRef } from './blobs.ts';
+import {
+  listWorkingTree,
+  watchWorkingTree,
+  type ListOptions,
+  type WorkingTreeChange,
+  type WorkingTreeEntry,
+} from './watcher.ts';
 
 import {
   encryptedLog,
@@ -41,6 +57,7 @@ import {
   readBundleFolder,
   publishDelivery,
   verifyMembership,
+  workspaceIdForRoot,
   type Bundle,
   type Manifest,
 } from '@workspace.sh/portable-bootstrap';
@@ -57,9 +74,33 @@ export interface WorkspaceCreateOptions {
   folder: string;
   /** Friendly name (metadata only, for now). */
   name?: string;
-  /** 32-byte seed fixing the workspace root identity. Defaults to random. */
+  /**
+   * 32-byte seed fixing the WORKSPACE's root identity. Defaults to random.
+   *
+   * One workspace, one root keypair — `workspace-format.md` resolves this
+   * explicitly: "Orgs with multiple workspaces create multiple `.workspace`
+   * folders, each with its own root keypair." The root public key IS the
+   * workspaceId, and the swarm topic is a hash of it, so sharing a root seed
+   * between workspaces gives them one identity and one topic.
+   *
+   * Pass this only to make a workspace reproducible in a test. Never pass a
+   * device's identity seed: that is a different identity (see `identitySeed`).
+   */
   rootSeed?: Uint8Array;
-  /** Corestore storage path. Defaults to `<folder>/.workspace/store`. */
+  /**
+   * 32-byte seed for the CREATOR's own peer identity — this device.
+   *
+   * Distinct from `rootSeed` by design. `identity-recovery.md`: "A device's
+   * identity is an ed25519 keypair whose public half is its `did:key`; the
+   * private half never leaves the device." The root identity belongs to the
+   * workspace; this one belongs to the machine, and one machine can create
+   * many workspaces.
+   *
+   * Defaults to `rootSeed`, which is the pre-#317 behaviour and is what the
+   * tests rely on. Real callers should pass their device seed.
+   */
+  identitySeed?: Uint8Array;
+  /** Working-store path (app-private). Unset → the runtime's temp default. */
   storage?: string;
   /** DHT bootstrap nodes (omit for the public DHT). */
   bootstrap?: Bootstrap;
@@ -71,31 +112,93 @@ export interface WorkspaceOpenOptions {
   folder: string;
   /** This peer's 32-byte identity seed. An envelope for its DID must exist. */
   identitySeed: Uint8Array;
-  /** Corestore storage path. Defaults to `<folder>/.workspace/store`. */
+  /**
+   * The workspace's 32-byte root seed, held by the device that created it.
+   * Given, and matching the workspace, it makes the opened handle an admin
+   * that can invite. A seed for a different workspace is refused.
+   */
+  rootSeed?: Uint8Array;
+  /** Working-store path (app-private). Unset → the runtime's temp default. */
   storage?: string;
   bootstrap?: Bootstrap;
 }
 
 type ChangeListener = () => void;
 
+/** Where this workspace's swarm announce stands. */
+export type AnnounceState = 'pending' | 'announced' | 'failed' | 'local-only';
+
+/** What a person would want to know about a workspace's connection. */
+export interface WorkspaceStatus {
+  /** Peers this device is replicating the workspace with now. */
+  peers: number;
+  announce: AnnounceState;
+  /** Whether this device can append to the workspace. */
+  writable: boolean;
+}
+
 const CAP: (resource: string) => CapabilityDescriptor = (resource) => ({
   can: 'workspace/read',
   with: resource,
 });
 
-/** Derive the swarm topic deterministically from the workspaceId. */
-function topicForWorkspace(workspaceId: string): string {
-  return createHash('sha256').update(`workspace://${workspaceId}`).digest('hex');
-}
+/**
+ * How long a workspace must be quiet before its log is copied into the folder.
+ *
+ * Long enough that a burst of edits costs one flush, short enough that the
+ * folder is never far behind. The materialiser debounces disk writes on a
+ * similar scale for the same reason.
+ */
+const FLUSH_DEBOUNCE_MS = 2_000;
 
-function defaultStorage(folder: string): string {
-  return `${folder}/.workspace/store`;
+/** Transport-form directory for one log (workspace-format.md § store/). */
+function transportDir(folder: string, key: string): string {
+  return `${folder}/.workspace/store/v1/${key}`;
 }
 
 /**
  * A live workspace handle. Obtain one via `Workspace.create` or
  * `Workspace.open`; release it with `close()`.
  */
+
+/**
+ * Announce this workspace on the swarm — WITHOUT waiting for it.
+ *
+ * Measured on a cellular connection: opening the corestore takes 73 ms and
+ * flushing the DHT announce takes **40 seconds**. Awaiting the announce before
+ * returning a workspace made every local operation wait on a network round
+ * trip, which is not what local-first means. The logs are open and readable
+ * long before the announce lands; peers arrive when they arrive.
+ *
+ * See the spike repo's `docs/network-conditions.md` for the measurements and
+ * for why a resolved `joinTopic` does not currently prove the announce
+ * succeeded.
+ *
+ * The returned promise is handed to the caller AND observed here, so a failed
+ * announce can be inspected without ever becoming an unhandled rejection.
+ * Attaching a handler is what marks it observed — a caller that ignores it is
+ * therefore safe.
+ */
+function announceInBackground(runtime: P2PRuntime, topic: string): Promise<void> {
+  // `swarm: false` runtimes are local-only and joining would throw. Nothing
+  // else — logs, flush, hydrate, the folder on disk — is affected; the
+  // workspace simply has no peers.
+  if (runtime.replicates === false) return Promise.resolve();
+
+  const announced = runtime.joinTopic(topic);
+  announced.catch((e: unknown) => {
+    // Terminal-visible, because a workspace that silently never announces
+    // looks exactly like one with no peers nearby.
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[workspace] announce failed for ${topic.slice(0, 8)}…: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+  });
+  return announced;
+}
+
 export class Workspace {
   /** Stable workspace identifier — the root public key, hex. */
   readonly id: string;
@@ -111,11 +214,31 @@ export class Workspace {
   private readonly folder: string;
   private readonly dataLog: Log; // K0_org-encrypted view
   private readonly keyDeliveryLog: Log;
+  /** Binary content, K0_org-encrypted. Null on a pre-blob workspace. */
+  private readonly blobLog: Log | null;
+  /** Per-session content-hash cache, so one image written twice costs one copy. */
+  private readonly blobsSeen = new Map<string, BlobRef>();
   // Root principal + secret are present only for the admin (creator); a
   // plain member opens without them and therefore cannot invite.
   private readonly root: Principal | null;
   private readonly listeners = new Set<ChangeListener>();
+  /** Pending debounced flush, if a write has scheduled one. */
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Set once close() has run, so a late timer cannot write to a closed log. */
+  private closed = false;
+  /**
+   * Resolves once the swarm announce has landed; rejects if it failed.
+   *
+   * Nothing needs to await this to use the workspace — that is the point. It
+   * exists so a caller that genuinely wants to know (a test, or a UI showing
+   * "local only" versus "syncing") can ask, rather than guessing from silence.
+   */
+  readonly announced: Promise<void>;
   private offChange: (() => void) | null = null;
+  private stopWatching: (() => void) | null = null;
+  private offPeers: (() => void) | null = null;
+  private announceState: AnnounceState;
+  private readonly statusListeners = new Set<(status: WorkspaceStatus) => void>();
 
   private constructor(args: {
     runtime: P2PRuntime;
@@ -127,7 +250,9 @@ export class Workspace {
     folder: string;
     dataLog: Log;
     keyDeliveryLog: Log;
+    blobLog: Log | null;
     root: Principal | null;
+    announced: Promise<void>;
   }) {
     this.runtime = args.runtime;
     this.id = args.id;
@@ -138,17 +263,66 @@ export class Workspace {
     this.folder = args.folder;
     this.dataLog = args.dataLog;
     this.keyDeliveryLog = args.keyDeliveryLog;
+    this.blobLog = args.blobLog;
     this.root = args.root;
+    this.announced = args.announced;
 
     // Fan the underlying log's append event out to registered listeners.
     this.offChange = this.dataLog.on('append', () => {
       for (const cb of this.listeners) cb();
     });
+
+    // Each workspace has its own runtime today, so the runtime's peers are
+    // this workspace's peers.
+    this.announceState = this.runtime.replicates === false ? 'local-only' : 'pending';
+    if (this.announceState === 'pending') {
+      this.announced.then(
+        () => this.setAnnounce('announced'),
+        () => this.setAnnounce('failed'),
+      );
+    }
+    this.offPeers = this.runtime.onPeersChanged?.(() => this.emitStatus()) ?? null;
+  }
+
+  private setAnnounce(state: AnnounceState): void {
+    if (this.closed) return;
+    this.announceState = state;
+    this.emitStatus();
+  }
+
+  private emitStatus(): void {
+    const status = this.status();
+    for (const cb of this.statusListeners) cb(status);
+  }
+
+  /** Peers, announce and writability, as they are now. */
+  status(): WorkspaceStatus {
+    return {
+      peers: this.runtime.peerCount?.() ?? 0,
+      announce: this.announceState,
+      writable: this.writable,
+    };
+  }
+
+  /** Hear when `status()` changes. Returns an unsubscribe. */
+  onStatus(cb: (status: WorkspaceStatus) => void): () => void {
+    this.statusListeners.add(cb);
+    return () => {
+      this.statusListeners.delete(cb);
+    };
   }
 
   /** True if this handle can invite members (i.e. holds the root key). */
   get isAdmin(): boolean {
     return this.root !== null;
+  }
+
+  /**
+   * True if this device can append to the workspace's data log. In v1 that is
+   * the store that created it; a device that was invited reads.
+   */
+  get writable(): boolean {
+    return this.dataLog.writable;
   }
 
   // -------------------------------------------------------------------------
@@ -157,65 +331,111 @@ export class Workspace {
 
   static async create(opts: WorkspaceCreateOptions): Promise<Workspace> {
     const rootSeed = opts.rootSeed ?? randomSeed();
+    // The creator's peer identity, which is NOT the workspace's root identity.
+    // Defaults to the root seed so existing callers and tests are unchanged.
+    const identitySeed = opts.identitySeed ?? rootSeed;
+    const selfDid = didFromSeed(identitySeed);
     const root = await principalFromSeed(rootSeed);
-    const rootKp = keyPairFromSeed(rootSeed);
-    const rootSecretKey = rootKp.secretKey; // 64-byte sodium form
-    const workspaceId = toHex(rootKp.publicKey);
+    const rootSecretKey = keyPairFromSeed(rootSeed).secretKey; // 64-byte sodium form
     const rootDid = root.did();
+    const workspaceId = workspaceIdForRoot(rootDid);
     const resource = `workspace://v1/${workspaceId}`;
 
     // The workspace base key. The creator (admin) holds it; members receive
     // it via a sealed envelope.
     const k0 = randomBytes32();
 
-    // Build the admin's own membership proof (root self-delegation) up front —
-    // it's derivable from the seed, so the auth gate can be wired at runtime
-    // construction. The creator's peer identity IS the root identity in v1.
-    const localProof = (
-      await createEnvelope({ did: rootDid, resource, key: k0, capability: CAP(resource) }, root)
-    ).ucan;
+    // The creator's own envelope. Built up front because the auth gate needs
+    // the membership proof at runtime-construction time, and KEPT because
+    // `open` recovers K0_org from exactly this envelope.
+    //
+    // It used to be built here, have its `.ucan` taken, and be discarded — so
+    // the folder was written with no envelopes at all and the creator could
+    // never reopen their own workspace. The creator's peer identity IS the
+    // root identity in v1, but being root is not what `open` checks: it looks
+    // for an envelope addressed to the opening DID, exactly as it does for
+    // anyone else.
+    //
+    // Addressed to the CREATOR'S DEVICE, not to the root. Root issuing a
+    // capability to a device is precisely the delegation `identity-recovery.md`
+    // describes ("root → device, scoped + expiring"), and it is what lets the
+    // two identities differ at all: `open` looks for an envelope addressed to
+    // the opening device, so addressing it to the root only worked while the
+    // two seeds were the same value (#317).
+    const selfEnvelope = await createEnvelope(
+      { did: selfDid, resource, key: k0, capability: CAP(resource) },
+      root,
+    );
+    const localProof = selfEnvelope.ucan;
 
     const runtime = await opts.createRuntime({
-      storage: opts.storage ?? defaultStorage(opts.folder),
-      identitySeed: rootSeed,
+      // No folder-based default: RocksDB must never live inside the
+      // workspace folder (ADR 0003). Unset falls through to the runtime's
+      // own default, a private temp directory.
+      storage: opts.storage,
+      // The device's identity on the swarm — the root keypair is the
+      // workspace's identity and is not a peer.
+      identitySeed,
       ...(opts.bootstrap ? { bootstrap: opts.bootstrap } : {}),
       auth: {
         localProof,
         verify: (remotePublicKey, remoteProof) =>
           verifyMembership({ proof: { ucan: remoteProof }, remotePublicKey, rootDid, resource }).then(
-            (v) => v.ok,
+            (v) => {
+              // Said on stderr: a peer that never connects looks like no peer
+              // at all, and the reason is the one thing worth knowing.
+              // eslint-disable-next-line no-console
+              if (!v.ok) console.warn(`[workspace] refused a connection: ${v.reason}`);
+              return v.ok;
+            },
           ),
       },
     });
 
-    // Well-known logs: a primary data log + the live key delivery log.
+    // Well-known logs: a primary data log, the live key delivery log, and a
+    // separate log for binary content. Blobs are kept out of the data log
+    // because `entries()` reads that log in full on every change — see
+    // ./blobs.ts.
     const rawDataLog = await runtime.createLog();
     const keyDeliveryLog = await runtime.createLog();
+    const rawBlobLog = await runtime.createLog();
 
     // Persist the bundle (manifest + attestation + log keys) to the folder.
     const bundle = await createBundle({
-      workspaceId,
       root,
       rootSecretKey,
       recipients: [],
-      logs: { data: rawDataLog.key, keyDelivery: keyDeliveryLog.key },
+      logs: {
+        data: rawDataLog.key,
+        keyDelivery: keyDeliveryLog.key,
+        blobs: rawBlobLog.key,
+      },
     });
+    // Same push `invite` uses — the creator is a member of their own
+    // workspace, and is recorded the same way every other member is.
+    bundle.envelopes.push(selfEnvelope);
     await writeBundleFolder(bundle, opts.folder);
 
-    await runtime.joinTopic(topicForWorkspace(workspaceId));
+    const announced = announceInBackground(runtime, bundle.manifest.topicId);
 
-    return new Workspace({
+    const ws = new Workspace({
       runtime,
+      announced,
       id: workspaceId,
-      did: rootDid,
+      did: selfDid,
       rootDid,
       k0,
       resource,
       folder: opts.folder,
       dataLog: encryptedLog(rawDataLog, k0),
       keyDeliveryLog,
+      blobLog: encryptedLog(rawBlobLog, k0),
       root,
     });
+    // Materialise the (empty) transport dirs now: a created folder has the
+    // full on-disk shape from its first second, not only after a first flush.
+    await ws.flushStore();
+    return ws;
   }
 
   // -------------------------------------------------------------------------
@@ -244,30 +464,75 @@ export class Workspace {
     const workspaceId = consumed.workspaceId;
     const resource = consumed.mine.resource;
 
+    // The root key, when this device holds it. Checked before anything is
+    // opened against the root DID the bundle's attestation verified, which is
+    // also the workspace's id.
+    let root: Awaited<ReturnType<typeof principalFromSeed>> | null = null;
+    if (opts.rootSeed !== undefined) {
+      const candidate = await principalFromSeed(opts.rootSeed);
+      if (candidate.did() !== rootDid) {
+        throw new Error(`the root seed given does not belong to workspace ${workspaceId}`);
+      }
+      root = candidate;
+    }
+
     // Our membership proof is the UCAN from our envelope.
     const myEnvelope = bundle.envelopes.find((e) => e.recipient === selfDid)!;
     const localProof = myEnvelope.ucan;
 
     const runtime = await opts.createRuntime({
-      storage: opts.storage ?? defaultStorage(opts.folder),
+      // No folder-based default: RocksDB must never live inside the
+      // workspace folder (ADR 0003). Unset falls through to the runtime's
+      // own default, a private temp directory.
+      storage: opts.storage,
       identitySeed: opts.identitySeed,
       ...(opts.bootstrap ? { bootstrap: opts.bootstrap } : {}),
       auth: {
         localProof,
         verify: (remotePublicKey, remoteProof) =>
           verifyMembership({ proof: { ucan: remoteProof }, remotePublicKey, rootDid, resource }).then(
-            (v) => v.ok,
+            (v) => {
+              // Said on stderr: a peer that never connects looks like no peer
+              // at all, and the reason is the one thing worth knowing.
+              // eslint-disable-next-line no-console
+              if (!v.ok) console.warn(`[workspace] refused a connection: ${v.reason}`);
+              return v.ok;
+            },
           ),
       },
     });
 
+    // Hydrate the working store from the folder's transport form FIRST —
+    // this is what makes a plain-copied folder open on a device that has
+    // never met the writer (invariant 5). Tolerant per log: a folder with no
+    // store, or a torn tail, hydrates what it can; replication heals the
+    // rest.
+    if (runtime.hydrateLogFromDir) {
+      const keys = [manifest.logs.data, manifest.logs.keyDelivery, manifest.logs.blobs];
+      for (const key of keys) {
+        if (!key) continue;
+        try {
+          await runtime.hydrateLogFromDir(key, transportDir(opts.folder, key));
+        } catch {
+          /* hydration is best-effort by design */
+        }
+      }
+    }
+
     const rawDataLog = await runtime.openLog(manifest.logs.data);
     const keyDeliveryLog = await runtime.openLog(manifest.logs.keyDelivery);
+    // Absent on a workspace created before blob support. Opening still works;
+    // only writing a blob fails, and it says why.
+    const rawBlobLog = manifest.logs.blobs
+      ? await runtime.openLog(manifest.logs.blobs)
+      : null;
 
-    await runtime.joinTopic(topicForWorkspace(workspaceId));
+    // The topic the manifest names, which consumeBundle checked the root signed.
+    const announced = announceInBackground(runtime, manifest.topicId);
 
     return new Workspace({
       runtime,
+      announced,
       id: workspaceId,
       did: selfDid,
       rootDid,
@@ -276,7 +541,8 @@ export class Workspace {
       folder: opts.folder,
       dataLog: encryptedLog(rawDataLog, k0),
       keyDeliveryLog,
-      root: null,
+      blobLog: rawBlobLog === null ? null : encryptedLog(rawBlobLog, k0),
+      root,
     });
   }
 
@@ -302,8 +568,12 @@ export class Workspace {
     const bundle: Bundle = await readBundleFolder(this.folder);
     bundle.envelopes.push(envelope);
     await writeBundleFolder(bundle, this.folder);
-    // Live carrier: publish to the key delivery log for connected peers.
-    await publishDelivery(this.keyDeliveryLog, envelope);
+    // Live carrier: publish to the key delivery log for connected peers. Only
+    // the store that created the log can append to it; from any other, the
+    // envelope in the folder is the delivery.
+    if (this.keyDeliveryLog.writable) {
+      await publishDelivery(this.keyDeliveryLog, envelope);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -313,15 +583,100 @@ export class Workspace {
   /** Append an entry to the workspace's data log (sealed under K0_org). */
   async write(entry: Uint8Array): Promise<void> {
     await this.dataLog.append(entry);
+    this.scheduleFlush();
+  }
+
+  /**
+   * Write the log's portable copy into the folder, shortly after a write.
+   *
+   * The transport form under `.workspace/store/v1/` is what makes the folder
+   * self-contained — invariant 5: a `cp -R` must produce a valid workspace.
+   * It used to be written only by `close()`, and nothing closes a workspace:
+   * quitting terminates the child, and since workspaces became live by default
+   * they are not closed at all. Folders were left with a manifest and no log,
+   * which opens as a workspace with no documents rather than failing (#341).
+   *
+   * Debounced rather than written per append. A flush replicates the whole log
+   * into a capture replica, so doing it per keystroke would be wasteful; a
+   * couple of seconds of quiet means the folder trails the log by seconds
+   * instead of by a session.
+   *
+   * Failures are swallowed for the same reason `close()` swallows them: a
+   * read-only or full folder must not break writing. The difference is that
+   * the next write schedules another attempt, so a transient failure heals
+   * rather than persisting until close.
+   */
+  private scheduleFlush(): void {
+    if (this.closed) return;
+    if (!this.runtime.flushLogToDir) return;
+    if (this.flushTimer !== null) clearTimeout(this.flushTimer);
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      if (this.closed) return;
+      void this.flushStore().catch(() => {
+        // See above: the working store still holds everything, and the next
+        // write tries again.
+      });
+    }, FLUSH_DEBOUNCE_MS);
+    // Never hold the process open for a flush. Node and Bare both honour
+    // unref; a host without it simply keeps its usual timer semantics.
+    (this.flushTimer as unknown as { unref?: () => void }).unref?.();
   }
 
   /** Read all entries, decrypted. */
   async entries(): Promise<Uint8Array[]> {
+    // How far to read depends on whether a block could still arrive.
+    //
+    // A replicating peer MUST wait: hypercore cores are sparse, so a freshly
+    // announced block is known-of before it is held, and `get()` fetching it
+    // is the whole mechanism by which sync delivers anything. Stopping at the
+    // downloaded prefix there would report an empty workspace whenever the
+    // read raced the transfer.
+    //
+    // A local-only log must NOT wait: nobody can ever supply the block, so
+    // `get()` past the verified prefix never returns. That is the shape a
+    // folder with a corrupt or missing transport message hydrates into — and
+    // stopping is also the right ANSWER, not merely the terminating one,
+    // since a tail that failed verification must not fold in.
+    const canReceive = this.runtime.replicates !== false;
+    const readable = canReceive
+      ? this.dataLog.length
+      : (this.dataLog.contiguousLength ?? this.dataLog.length);
     const out: Uint8Array[] = [];
-    for (let i = 0; i < this.dataLog.length; i++) {
+    for (let i = 0; i < readable; i++) {
       out.push(await this.dataLog.get(i));
     }
     return out;
+  }
+
+  /**
+   * Store binary content and return a reference small enough to put in a
+   * document entry. The bytes go to the blob log, not the data log.
+   */
+  async writeBlob(
+    content: Uint8Array,
+    options: { contentType?: string } = {},
+  ): Promise<BlobRef> {
+    if (this.blobLog === null) {
+      throw new Error(
+        'this workspace has no blob log — it was created before binary content ' +
+          'was supported, so images and other files cannot be stored in it',
+      );
+    }
+    return writeBlob(this.blobLog, content, { ...options, seen: this.blobsSeen });
+  }
+
+  /** Fetch the content a reference points at, verifying it against its hash. */
+  async readBlob(ref: BlobRef): Promise<Uint8Array> {
+    if (this.blobLog === null) {
+      throw new Error('this workspace has no blob log — nothing to read from');
+    }
+    return readBlob(this.blobLog, ref);
+  }
+
+  /** Whether this workspace can store binary content. */
+  get supportsBlobs(): boolean {
+    return this.blobLog !== null;
   }
 
   /** Number of entries currently visible locally. */
@@ -340,12 +695,82 @@ export class Workspace {
   // Lifecycle
   // -------------------------------------------------------------------------
 
+  /**
+   * Watch the working tree and report settled external changes.
+   *
+   * Reports raw bytes per path; it deliberately does not encode document
+   * entries, because the log is a byte log and the document model belongs to
+   * the consumer (`@workspace.sh/core`). Returns a stop function.
+   *
+   * NOTE for callers: this fires for OUR OWN writes too — the filesystem
+   * cannot tell them apart. Whoever materialises the log to disk must filter
+   * echoes before writing back, or the log grows without bound.
+   */
+  watchWorkingTree(onChange: (change: WorkingTreeChange) => void): () => void {
+    const stop = watchWorkingTree(this.folder, onChange);
+    this.stopWatching = stop;
+    return stop;
+  }
+
+  /**
+   * Read every watchable file in the working tree, once.
+   *
+   * The counterpart to `watchWorkingTree`, which reports only *changes* and so
+   * can never see a file that merely exists. Without this, divergence that
+   * happened while the workspace was closed is invisible, and the materialise
+   * pass writes the log over it (#280).
+   */
+  listWorkingTree(options?: ListOptions): Promise<WorkingTreeEntry[]> {
+    return listWorkingTree(this.folder, options);
+  }
+
+  /**
+   * Flush every log to its transport form in `.workspace/store/v1/` —
+   * what makes the folder a complete, portable copy (ADR 0003). Called
+   * automatically on close; call it explicitly before sharing the folder.
+   *
+   * No-op (returning null) on a runtime that does not own a corestore.
+   */
+  async flushStore(): Promise<{ written: number } | null> {
+    if (!this.runtime.flushLogToDir) return null;
+    let written = 0;
+    for (const log of [this.dataLog, this.keyDeliveryLog, this.blobLog]) {
+      if (log === null) continue;
+      // Only what this device holds contiguously. Copying past a gap would
+      // wait for a peer to supply the missing blocks, and on a device that is
+      // quitting or offline no peer is coming.
+      if (log.contiguousLength !== undefined && log.contiguousLength < log.length) continue;
+      const r = await this.runtime.flushLogToDir(log.key, transportDir(this.folder, log.key));
+      written += r.written;
+    }
+    return { written };
+  }
+
   async close(): Promise<void> {
+    if (this.stopWatching) {
+      this.stopWatching();
+      this.stopWatching = null;
+    }
     if (this.offChange) {
       this.offChange();
       this.offChange = null;
     }
     this.listeners.clear();
+    this.statusListeners.clear();
+    this.offPeers?.();
+    this.offPeers = null;
+    this.closed = true;
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    try {
+      await this.flushStore();
+    } catch {
+      // Flush is durability icing, not correctness: the working store and
+      // any replicated peers still hold everything. Close must not fail
+      // because the folder was read-only or full.
+    }
     await this.runtime.close();
   }
 }
@@ -359,13 +784,31 @@ function randomSeed(): Uint8Array {
 }
 
 function randomBytes32(): Uint8Array {
-  const b = new Uint8Array(32);
-  globalThis.crypto.getRandomValues(b);
+  // sodium rather than `globalThis.crypto`: this module packs into a Bare
+  // worklet, and Bare has no `crypto` global.
+  const b = b4a.alloc(32);
+  sodium.randombytes_buf(b);
   return b;
 }
 
-function toHex(bytes: Uint8Array): string {
-  let s = '';
-  for (const b of bytes) s += b.toString(16).padStart(2, '0');
-  return s;
-}
+export {
+  BlobIntegrityError,
+  BlobSizeError,
+  CHUNK_BYTES,
+  isBlobRef,
+  MAX_BLOB_BYTES,
+  readBlob,
+  writeBlob,
+  type BlobRef,
+} from './blobs.ts';
+
+export {
+  isWatchablePath,
+  listWorkingTree,
+  toWorkspaceRelative,
+  watchWorkingTree,
+  type ListOptions,
+  type WatchOptions,
+  type WorkingTreeChange,
+  type WorkingTreeEntry,
+} from './watcher.ts';
