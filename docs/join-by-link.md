@@ -1,0 +1,241 @@
+# Joining by link
+
+**Status:** proposal, 14 Sep 2026. Needs Leslie's decisions on the questions
+marked **Decide**. Nothing here is implemented except where it says so.
+
+How a device that has been shared a workspace gets from "someone sent me
+something" to "I am replicating it", and what a `workspace://` link has to
+carry for that to work without sending a folder.
+
+---
+
+## The layers, and where each one stops
+
+A join crosses three layers. Each does one job and hands over.
+
+| Layer | Its job | Where it stops |
+|---|---|---|
+| **Holepunch transport**: HyperDHT, Hyperswarm, Protomux | Find peers by topic, hole-punch, open a Noise connection that proves each side holds its device key, multiplex channels over it | Two devices that know each other's device key, with an encrypted pipe and channels |
+| **UCAN**, via ucanto | Say who may do what: the root, or someone the root delegated to, grants a device `workspace/read` on `workspace://v1/<id>` until a time | At the connection gate: the chain verifies to the root, names this workspace, and its audience is the key Noise just proved. After that UCAN is not consulted |
+| **Hypercore**, Corestore | Append-only logs signed by their writer; replication sends blocks a reader verifies against the log key | "These are exactly the bytes the writer appended". It knows keys, not people, and does not encrypt |
+
+What is ours, not Holepunch's or ucanto's:
+
+- **The device key.** One ed25519 key is both the Noise static key and the
+  UCAN audience (`did:key`). That binding is what makes a copied UCAN useless
+  to anyone else.
+- **The envelope.** A UCAN plus the workspace key K0 sealed to the recipient's
+  key (X25519), plus the resource URI.
+- **The attestation.** The root's signature over the manifest.
+- **Content encryption.** Blocks are sealed under K0 before Hypercore stores
+  them (`encryptedLog`).
+
+A join in order, with the owner of each step:
+
+| # | Step | Layer |
+|---|---|---|
+| 1 | B has a device key; its DID is its ID | ours |
+| 2 | An admin issues root → B `workspace/read`, and seals K0 to B: the envelope | UCAN, ours |
+| 3 | The envelope reaches B | this document |
+| 4 | B verifies the attestation, validates its UCAN, unwraps K0 | ours, UCAN |
+| 5 | B joins the topic, hole-punches to a member, Noise proves both keys | Holepunch |
+| 6 | Both present UCANs on `workspace/auth@1`; each verifies the other | UCAN over Protomux |
+| 7 | Replication of the workspace's cores | Hypercore |
+| 8 | B decrypts blocks with K0 | ours |
+
+## Entry points
+
+A device can be handed a workspace three ways. All three end at the same place:
+an envelope for this device, a verified attestation, and steps 4–8 above.
+
+| Entry point | Carries | Works today | Private if intercepted |
+|---|---|---|---|
+| **The whole folder** (`Acme.workspace` over Dropbox, Drive, AirDrop, SD card, USB) | Everything: public-tier documents as plain files, `.workspace/` with the encrypted store and every envelope | Yes, once the recipient has been shared with *before* the copy is made. Opens offline; follows live edits when a member is online | Only for tier-gated content. Public-tier documents are plain files in the folder (`workspace-format.md` rule 1), and every document is public-tier today |
+| **An invitation** (`.workspace/` holding manifest, attestation, the recipient's envelope) | No content | Yes (workspace#456). Content arrives from a member online | Yes: reveals the workspace key, its log keys and root DID, and nothing readable |
+| **A `workspace://` link** (pasted, or a QR code) | See Decide 2 | No | See Decide 2 |
+
+Two notes for the folder:
+
+- Send a copy. A cloud folder that both devices' apps have open is a folder two
+  apps write into, each receiving the other's writes through the sync engine;
+  `workspace-format.md` § cloud sync says a sync engine gives you a copied folder,
+  not a peer.
+- For a folder that must stay private in transit, send `.workspace/` alone,
+  including `store/`: the recipient reads it offline and nobody else can.
+
+## What works today
+
+- **Step 2** for any admin, and on Linux after reopening: the creating device
+  keeps the root seed (workspace-sh/workspace#453).
+- **Step 3 by folder.** The admin exports an *invitation*: a folder holding
+  only `.workspace/manifest.json`, `attestation.json` and the recipient's
+  envelope (workspace#456). B opens it with Open Workspace…, and steps 4–8 run.
+  Proven through the apps' own child processes over a private DHT
+  (`yarn p2p:smoke:two-device`) and with the Linux app as the recipient.
+- **Step 6** verifies every link's signature, the chain to the root, and that
+  the capability names this workspace (workspace#430, #448).
+
+A link that replaces the folder is the gap.
+
+## Why a link does not work yet
+
+1. **The gate is first.** A member exchanges nothing with a connection until it
+   presents a valid UCAN. A device holding only a link has no UCAN yet: its UCAN
+   is inside the envelope it is trying to fetch. `uri-scheme.md` § Resolution
+   flow says "fetch `manifest.json` + `attestation.json` from any peer" without
+   saying how, before or around the gate.
+2. **Identifiers disagree.** See Decide 1.
+3. **Nothing handles `workspace://`** on any platform yet (workspace#236).
+
+Whatever a link carries, **the admin still needs B's device key before B can
+read**, because K0 is sealed to it. A link changes how the envelope travels,
+not whether B's ID reaches the admin first — except in Option C, which moves
+that exchange online.
+
+---
+
+## Decide 1 — the workspace id, the topic, and what the attestation signs
+
+Today's implementation and the spec differ:
+
+| | Spec | Implementation |
+|---|---|---|
+| `workspaceId` | multibase base58btc of the root key (`z6Mk…`) | hex of the root key |
+| UCAN resource | `workspace://v1/<z…>` | `workspace://v1/<hex>` |
+| Topic | SHA-256 of the root key bytes | SHA-256 of the string `workspace://<hex>` |
+| `manifest.topicId` | present | absent |
+| Attestation covers | `workspaceId`, `createdAt`, `formatVersion` | the same, not `logs` |
+
+The key bytes are the same in both; only representation and derivation differ.
+
+**Why it matters beyond tidiness.**
+
+- A device following `uri-scheme.md` would derive a different topic from a link
+  and find no one.
+- `core/src/uri.ts` rejects hex identifiers.
+- Log keys are not signed, so a tampered manifest can point a reader at other
+  logs. A member holds K0 and could hand someone a folder whose manifest points
+  at logs the member wrote; the reader would take them as the workspace's.
+  Confidentiality holds; integrity does not.
+- The spec's topic-layer revocation (`permissions-model.md` Lever 2) rotates the
+  topic. A topic fixed by the root key cannot rotate; a topic named in a signed
+  manifest can.
+
+**Recommendation.**
+
+1. Keep the id as the root key's bytes; write it as multibase `z…` everywhere
+   it is serialised (manifest, UCAN resource, links), as the spec says. Readers
+   accept hex for workspaces made before the change.
+2. Put `topicId` in the manifest, initially SHA-256 of the root key bytes as the
+   spec says, and join the manifest's topic rather than deriving one.
+3. Sign `logs` and `topicId` in the attestation (`formatVersion: 1`). Readers
+   verify version 0 attestations as today.
+4. Pre-alpha, no migration of old workspaces: workspaces created before this
+   keep working through the hex/version-0 read paths, and can be recreated.
+   Workspaces the macOS app created have no stored root key, so they could not
+   be re-signed anyway.
+
+**Decide:** agree to 1–4, or keep hex and amend the spec instead.
+
+---
+
+## Decide 2 — how a link delivers the envelope
+
+Three shapes. All reveal the workspace's public key to whoever holds the link.
+
+### What any link reveals
+
+A link names the root key, so anyone holding it can derive or learn the topic
+and ask the DHT which addresses are announcing it: **the network addresses of
+the members who are online.** `uri-scheme.md` § What can leak currently lists
+"membership of the workspace" as not leaking; that is only true of *identities*,
+not of addresses, and should say so. No content, K0, or UCAN leaks from the key
+alone, and the gate refuses the connection.
+
+### Option A — envelope in the link (spec § Reserved: targeted-envelope URIs)
+
+```
+workspace://v1/<z-root-key>/invite/<z-recipient>#<base64url envelope>
+```
+
+- The admin already has B's ID (as today) and puts B's envelope in the link, in
+  the fragment so it is not sent anywhere a URL is logged.
+- B's app verifies the envelope is addressed to B, validates the UCAN against
+  the root key in the link, unwraps K0, joins the topic, and presents its UCAN at
+  the gate like any member.
+- **After** admission, the member it connected to sends the manifest and
+  attestation on the authenticated channel (a `bootstrap` message on
+  `workspace/auth@1`, or a second channel opened only after the gate). B checks
+  the attestation against the root key from the link.
+- **Nothing is served before the gate.** Forwarding the link gives others
+  nothing: the envelope is sealed to B and the UCAN's audience is B.
+- Cost: a long link. Measured: the UCAN is 473 bytes and the whole envelope
+  base64url-encoded is about 1,240 characters, so a link is about 1.3 KB. Fine to
+  paste; it fits a QR code, but a dense one.
+
+### Option B — envelope fetched before the gate (`uri-scheme.md` as written)
+
+```
+workspace://v1/<z-root-key>/invite/<z-recipient>
+```
+
+- A new `workspace/bootstrap@1` channel that members answer **before** the gate,
+  serving the manifest, the attestation, and the envelope whose recipient is the
+  connection's Noise-proven key.
+- Short links, but members answer unauthenticated connections, which widens what
+  an attacker who has the key can do: probe whether an address holds an
+  envelope, and exercise parsing code before the gate. Needs rate limits and a
+  careful review of what the pre-gate manifest includes (log keys could be held
+  back until admission).
+
+### Option C — bearer invite, no device ID first (not in the spec)
+
+- The link carries a one-time invite secret. B proves it holds the secret and
+  sends its device ID; a member online at that moment seals and returns B's
+  envelope. Holepunch's `blind-pairing` implements this pattern over HyperDHT
+  (`createInvite`, `addMember`/`onadd`, `addCandidate`) for Autobase keys.
+- Removes pasting a device ID, which is the friendliest shape.
+- Requires a member, or a Lighthouse (`lighthouse.md`), online when B claims it;
+  the invite must be single-use and expire, since whoever claims a forwarded link
+  first gets in; and the admin-side "who may confirm" rule needs defining.
+
+**QR codes:** Option A's link makes a dense QR code; Options B and C are short. If scanning a code is the main way people share, that favours C.
+
+**Recommendation:** Option A for alpha. It keeps the gate the first thing a
+connection meets, needs no new pre-authentication surface, and uses the envelope
+and gate that already work. Record Option C as the next step for sharing without
+exchanging IDs, and Option B as not planned unless short links become necessary.
+
+**Decide:** A for alpha, and C after?
+
+---
+
+## Implementation order (after the decisions)
+
+1. Identifiers and attestation (Decide 1), with dual-read for existing folders.
+2. Post-gate bootstrap message: a member sends the manifest and attestation to
+   an admitted peer that lacks them.
+3. Link encode/decode in `@workspace.sh/core` (`uri.ts` already parses the
+   shape; add the envelope fragment).
+4. Linux: Copy Invite Link next to Export Invitation…; a `workspace://` handler
+   (`.desktop` `x-scheme-handler/workspace`) that opens the link.
+5. A two-device smoke that joins from the link alone.
+
+## Open questions
+
+- After a topic rotation, how does a link holder find the new topic? A link made
+  before rotation belongs to a member who is, by then, either still a member
+  (and should learn the new topic through the key delivery log) or revoked (and
+  should not).
+- Per-workspace admission when one connection carries several workspaces (#47).
+- Revocation: `isRevoked` is not wired yet (workspace-sh/workspace#433), so a
+  link's UCAN is valid until it expires.
+
+## Cross-references
+
+- [`uri-scheme.md`](./uri-scheme.md) — link shape, resolution flow, what leaks
+- [`workspace-format.md`](./workspace-format.md) — manifest, attestation, envelopes, distribution shapes
+- [`permissions-model.md`](./permissions-model.md) — the gate, the two carriers, revocation levers
+- [`identity-recovery.md`](./identity-recovery.md) — device linking uses the same envelope
+- [`lighthouse.md`](./lighthouse.md) — an always-on member, for Option C
+- [`many-workspaces.md`](./many-workspaces.md) — one runtime, many workspaces
