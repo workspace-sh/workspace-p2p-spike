@@ -24,6 +24,7 @@
 // Randomness via sodium rather than `node:crypto` or the `crypto` global, so
 // this module packs into a Bare worklet for the mobile path (#229).
 import b4a from 'b4a';
+import { stat } from 'fs/promises';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import sodiumModule from 'sodium-universal';
 
@@ -733,6 +734,9 @@ export class Workspace {
    */
   async flushStore(): Promise<{ written: number } | null> {
     if (!this.runtime.flushLogToDir) return null;
+    // A folder moved or deleted while open is not written to: the flush makes
+    // its directories, and would put a `.workspace` back at the old path.
+    if (!(await isDirectory(`${this.folder}/.workspace`))) return { written: 0 };
     let written = 0;
     for (const log of [this.dataLog, this.keyDeliveryLog, this.blobLog]) {
       if (log === null) continue;
@@ -778,6 +782,14 @@ export class Workspace {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 function randomSeed(): Uint8Array {
   return randomBytes32();

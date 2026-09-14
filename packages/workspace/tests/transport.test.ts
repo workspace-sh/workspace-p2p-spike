@@ -8,7 +8,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -54,6 +54,25 @@ test('a freshly created workspace has the full on-disk shape', async () => {
     // One transport dir per log named in the manifest: data, keyDelivery, blobs.
     assert.equal(dirs.length, 3, `expected 3 log dirs, got ${JSON.stringify(dirs)}`);
     await ws.close();
+  });
+});
+
+test('closing a workspace whose folder moved leaves nothing at the old path', async () => {
+  await withBase(async base => {
+    const folder = join(base, 'acme.workspace');
+    const ws = await Workspace.create({
+      createRuntime: offlineRuntime(base, 'store-a'),
+      folder,
+      rootSeed: ROOT_SEED,
+    });
+    await ws.write(enc.encode('written before the move'));
+    const moved = join(base, 'moved.workspace');
+    await rename(folder, moved);
+
+    await ws.close();
+
+    await assert.rejects(stat(folder), { code: 'ENOENT' });
+    assert.ok((await stat(join(moved, '.workspace', 'manifest.json'))).isFile());
   });
 });
 
