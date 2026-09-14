@@ -488,40 +488,64 @@ specific role.
 
 ```json
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "workspaceId": "z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc",
   "createdAt": 1717200000,
   "rootDid": "did:key:z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc",
-  "topicId": "ab83…",
+  "topicId": "af8757dc370b001d97d81bda285b80b147e6ca845967ce387e42ec54425209b9",
   "logs": {
     "data": "hex-encoded-hypercore-key",
-    "keyDelivery": "hex-encoded-hypercore-key"
+    "keyDelivery": "hex-encoded-hypercore-key",
+    "blobs": "hex-encoded-hypercore-key"
   }
 }
 ```
 
 The workspace's stable identity. `workspaceId` is the multibase
-encoding of the root pubkey — the same bytes carried inside
-`rootDid`'s `did:key:` form (see resolved open question below).
-Bootstrap fields: creation time, root DID, Hyperswarm topic, and
-the Hypercore log addresses that carry data and key delivery. Read
-at bootstrap by any peer.
+encoding of the root pubkey — `rootDid` without its `did:key:` prefix
+(see resolved open question below). A reader refuses a manifest
+whose `workspaceId` is not its `rootDid`'s key.
+
+`topicId` is the Hyperswarm topic peers meet on, hex. A new workspace
+records SHA-256 of the root's 32-byte public key (the key bytes
+alone, without the multicodec prefix), the same topic
+[`uri-scheme.md`](./uri-scheme.md) derives from a link. Peers join
+the topic the manifest names; since the attestation signs it, only
+the root can name a different one.
+
+`logs` holds the Hypercore keys of the data log, the key delivery
+log, and the blob log.
+
+`formatVersion` is 2. A reader refuses a manifest of any other
+version and says which version it found.
 
 ### `attestation.json`
 
-The root DID's signature over `(workspaceId, createdAt,
-formatVersion)`. Defeats tampering of the manifest and replay of
-stale workspaces. Does **not** defeat fraudulent identity claims —
+The root DID's signature over every manifest field except `rootDid`,
+which is the signer: `workspaceId`, `createdAt`, `formatVersion`,
+`topicId` and `logs`. A manifest that differs from the signed payload
+in any of them is refused, so a folder cannot point a reader at other
+logs or another topic. Defeats tampering of the manifest and replay
+of stale workspaces. Does **not** defeat fraudulent identity claims —
 verifying that a given `did:key:z…` belongs to a legitimate
 authority still requires an out-of-band channel. See
 [`threat-model.md`](./threat-model.md).
+
+The signed bytes are UTF-8 JSON with no whitespace and every object's
+keys in alphabetical order; absent optional fields are omitted.
 
 Format mirrors the `SignedAttestation` struct in
 `@workspace.sh/p2p-runtime/src/attestation.ts`:
 
 ```json
 {
-  "payload": { "workspaceId": "z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc", "createdAt": 1717200000, "formatVersion": 1 },
+  "payload": {
+    "workspaceId": "z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc",
+    "createdAt": 1717200000,
+    "formatVersion": 2,
+    "topicId": "af8757dc370b001d97d81bda285b80b147e6ca845967ce387e42ec54425209b9",
+    "logs": { "data": "…", "keyDelivery": "…", "blobs": "…" }
+  },
   "payloadBytes": "<base64>",
   "signature": "<base64>",
   "rootDid": "did:key:z…"
