@@ -249,65 +249,69 @@ and topic rotation as its escape hatch.
 
 **Decide:** agree, or open requests sooner?
 
-## Decide 4 — public workspaces, and permissions inside private ones
+## Decide 4 — one permission model for private and public
 
-### Public workspaces
+Private and public are not two kinds of workspace. They are the same workspace
+model with different grants: public means a read grant to anyone.
 
-The spec has one kind of workspace: private, joined by envelope. A public one,
-in the way a Dat archive or a torrent is public, is a different mode rather
-than an exception to the gate.
+### What a grant does
 
-What makes those public is that **the link is the read capability**: no gate,
-anyone holding it replicates, anyone replicating can serve others, and nothing
-once published can be withdrawn. For a workspace that means three access modes,
-named in the root-signed `policy.json` so every member enforces the same one:
+A UCAN capability names an action on a scope: `document/read`,
+`document/edit` or `document/publish`, on the whole workspace, a folder or a
+file. The grant is the single statement of who may do what. Three mechanisms
+make it true, because each action is enforced in a different place:
 
-| Mode | Who reads | Gate | Content key | How it is found |
-|---|---|---|---|---|
-| **Private** (today) | Devices sealed an envelope | UCAN required | Sealed to each recipient | Folder, invitation, or link with an envelope |
-| **Anyone with the link** | Whoever holds the link | Admits any connection, read-only | Carried in the link's fragment | The link |
-| **Listed** | Anyone | Admits any connection, read-only | Published with the listing, or public tier unencrypted | `discovery.md` (DNS TXT, `.well-known`) |
+| Action | Enforced by | How |
+|---|---|---|
+| **Write** (edit, create, delete) | Every peer applying entries | With multiple writers, an entry is applied only if its author holds `document/edit` on its path (Autobase's apply step, ADR 0002). UCAN alone decides |
+| **Publish** (make a scope public) | Every peer applying entries | Publishing is a write that requires `document/publish`, held by admins, so admins control what may become public; the chain records who published what |
+| **Read** | Keys, and replication | Once ciphertext reaches a peer, only the keys it holds decide what it can decrypt. So each scope is encrypted with its own key, delivered only to devices whose UCAN grants read on it; and peers replicate a scope's blocks only to connections whose UCAN grants it, so a device without the grant never receives the ciphertext |
 
-In the two public modes:
+UCAN is the policy for all three. For reading, keys and replication are how the
+policy holds on a device that has already received data.
 
-- **Writing** stays with the admin (single writer today); contributors come
-  with multi-writer.
-- **Every reader can serve.** A reader replicates to other readers, like a
-  torrent peer; a Lighthouse keeps the workspace available when no one else is
-  online.
-- **No inbox.** Readers take nothing an admin must grant, so there are no access
-  requests to flood. Requests, if any, are for *contributing*.
-- **Withdrawal is forward-only.** Rotating the key and topic stops future
-  updates reaching old links; copies already made stay made, as with any
-  published file.
-- **Anyone can see who else is reading**: every reader announces the topic, so
-  readers' network addresses are visible to each other. Worth saying in the UI.
+### Public, in this model
 
-### Permissions inside a private workspace
+- A **public scope** is a read grant to an "anyone" audience, whose key is
+  published (in a link, or with a listing via `discovery.md`), and whose blocks
+  peers replicate to any connection.
+- A **public workspace** is a workspace whose root scope is public. A private
+  workspace can contain public files, and a public workspace private folders.
+- **Read-only versus editable** is which capability a device holds, in either.
+- Every reader of a public scope can serve it to others, like a torrent peer; a
+  Lighthouse keeps it available.
+- Readers need nothing granted to them individually, so a public scope has no
+  access-request inbox.
+- Withdrawal is forward-only (rotate the scope's key and topic), as with any
+  published file; the product answers this with messaging: confirm with the
+  file's creator before publishing, and let admins restrict who may publish.
+- Readers of a public scope can see each other's network addresses, since all
+  announce the same topic. Worth saying in the UI.
 
-Read-only invites are today's member. Finer permissions, per document or per
-group, are two mechanisms working together, as `permissions-model.md` describes:
+### What this needs that does not exist
 
-- **Reading is decided by keys.** Replication hands every member the same
-  ciphertext; there is no server to refuse a file. What a member can read is
-  what they hold keys for: the workspace key K0 for public tier, and a group or
-  person's tier key (`K1_<group>`, `K2_<person>`) for gated documents or fields.
-- **UCAN says who was entitled to what, and authorises writes.** The delegation
-  chain records which keys a device was granted and by whom, gates connections,
-  and, once there are several writers, is what Autobase's apply step checks
-  before accepting an entry: does its author hold `document/edit` on that path
-  or group?
+1. **Per-scope keys**, the spec's tiers (`K1_<group>`, `K2_<person>`)
+   generalised to folders and files, with a structure where holding a folder's
+   key yields the keys beneath it.
+2. **Per-scope replication gating**: peers decide per core, not per connection
+   (#47), which implies scopes map to cores or to keys within them.
+3. **An "anyone" audience** for UCAN grants, and published keys for such scopes.
+4. **Capability-checked writes**, including `publish`, with multi-writer
+   (spike#11).
 
-Today every document is public tier (K0 only) and there is one writer, so a
-member reads everything and writes nothing. Tier keys and capability-checked
-writes are designed, not built.
+Today there is one key, one writer and one gate per workspace, so a member reads
+everything and writes nothing.
 
-**Recommendation:** add `access: private | link | listed` to `policy.json`;
-build **anyone with the link** after Option A (it shares the link encoding and
-most of the join path); build tier keys with multi-writer, where per-group
-permissions start to mean something.
+**Prior art to study before designing 1 and 2:** Fission's WNFS (Webnative File
+System) — public and private file trees in one filesystem, UCAN for write
+authorisation, per-node keys for private reading. Not yet read closely here;
+its key hierarchy is the part most likely to carry over.
 
-**Decide:** the three modes, and link-mode next?
+**Recommendation:** adopt this single model as the direction. For alpha, ship
+link invites (Option A) on today's one-scope workspace; design scopes (items
+1–3) against WNFS next, and land capability-checked writes with multi-writer.
+
+**Decide:** this model as the direction?
 
 ## Implementation order (after the decisions)
 
