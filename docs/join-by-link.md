@@ -254,6 +254,23 @@ and topic rotation as its escape hatch.
 Private and public are not two kinds of workspace. They are the same workspace
 model with different grants: public means a read grant to anyone.
 
+This builds on what is already specified, not on a blank page:
+
+- `workspace-format.md` § Permission semantics: per-file `read`/`edit`/`admin`
+  for `.md` and `.canvas`; tier-gated content encrypted with tier keys
+  delivered by UCAN; folder-level tiering conventions; a peer's access is the
+  union of the keys its delegation chains grant; hidden schema entries for
+  `.table/`.
+- `table-file-format` `docs/PERMISSIONS.md`: two layers of keys (a Hypercore
+  writer keypair decides who writes; symmetric tier keys decide who reads); one
+  key and one set of roles per document; field-level tiers; Autobase for
+  several writers; the key delivery log; the two revocation levers; MLS as the
+  upgrade path for large groups; what metadata stays observable, and a
+  separate restricted topic for documents whose existence is sensitive.
+
+What follows adds public grants and publishing to that model, and says how
+each action is enforced.
+
 ### What a grant does
 
 A UCAN capability names an action on a scope: `document/read`,
@@ -288,18 +305,22 @@ policy holds on a device that has already received data.
 - Readers of a public scope can see each other's network addresses, since all
   announce the same topic. Worth saying in the UI.
 
-### What this needs that does not exist
+### What is not yet specified, and not built
 
-1. **Per-scope keys**, the spec's tiers (`K1_<group>`, `K2_<person>`)
-   generalised to folders and files, with a structure where holding a folder's
-   key yields the keys beneath it.
-2. **Per-scope replication gating**: peers decide per core, not per connection
-   (#47), which implies scopes map to cores or to keys within them.
-3. **An "anyone" audience** for UCAN grants, and published keys for such scopes.
-4. **Capability-checked writes**, including `publish`, with multi-writer
-   (spike#11).
+Specified above but not built: per-document keys and roles, tier keys, field
+tiers, Autobase writers, key delivery scanning. Not yet specified anywhere:
 
-Today there is one key, one writer and one gate per workspace, so a member reads
+1. **A public grant**: an "anyone" audience (or its equivalent outside UCAN),
+   and a published key for a public scope.
+2. **`publish`** as a capability admins hold, checked when entries are applied.
+3. **A folder key hierarchy**: "folder-level tiering conventions" is named, not
+   designed; holding a folder's key should yield the keys beneath it.
+4. **Replication by scope**: the table permissions doc replicates all
+   ciphertext to members and lets keys decide, with a separate restricted topic
+   for documents whose existence is sensitive. Whether scopes should also
+   restrict which cores a connection receives (#47) is open.
+
+Built today: one key, one writer and one gate per workspace, so a member reads
 everything and writes nothing.
 
 **Prior art to study before designing 1 and 2:** Fission's WNFS (Webnative File
@@ -308,8 +329,9 @@ authorisation, per-node keys for private reading. Not yet read closely here;
 its key hierarchy is the part most likely to carry over.
 
 **Recommendation:** adopt this single model as the direction. For alpha, ship
-link invites (Option A) on today's one-scope workspace; design scopes (items
-1–3) against WNFS next, and land capability-checked writes with multi-writer.
+link invites (Option A) on today's one-scope workspace; specify items 1–4 next,
+informed by WNFS, UCAN 1.0 and Ink & Switch's Keyhive and BeeKEM (research
+under way); land capability-checked writes with multi-writer.
 
 **Decide:** this model as the direction?
 
