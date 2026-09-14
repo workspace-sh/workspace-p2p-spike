@@ -12,6 +12,22 @@
       "default": "./src/index.ts"
     }
   },
+  "_imports_note": [
+    "Host-conditional builtins — see the same block in @workspace.sh/p2p-runtime.",
+    "Under Bare these resolve to the bare-* shims; under Node the map is inert.",
+    "This module reads and writes the .workspace folder, so it has to pack into",
+    "the mobile worklet. Import UNPREFIXED specifiers here (#229)."
+  ],
+  "imports": {
+    "fs/promises": {
+      "bare": "bare-fs/promises",
+      "default": "fs/promises"
+    },
+    "path": {
+      "bare": "bare-path",
+      "default": "path"
+    }
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --no-warnings --test \"tests/**/*.test.ts\""
@@ -21,10 +37,14 @@
   },
   "dependencies": {
     "@workspace.sh/p2p-runtime": "*",
-    "@workspace.sh/ucan-boundary": "*"
+    "@workspace.sh/ucan-boundary": "*",
+    "b4a": "^1.8.1",
+    "bare-fs": "4.7.4",
+    "bare-path": "3.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
+    "hypercore-crypto": "^3.7.0",
     "typescript": "^5.6.0"
   }
 }

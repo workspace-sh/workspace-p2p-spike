@@ -12,8 +12,8 @@
 //      be a USB stick, AirDrop, NAS drop, email attachment, etc.).
 //   4. Peer B reads the folder, validates the root attestation, unwraps the
 //      envelope, recovers K0_org and the UCAN.
-//   5. Both peers join the workspace's Hyperswarm topic — derived from the
-//      workspaceId (which IS the root pubkey, per the spec).
+//   5. Both peers join the workspace's Hyperswarm topic — the manifest's
+//      topicId, SHA-256 of the root's public key.
 //   6. Peer A appends data to the workspace's data log.
 //   7. Peer B opens the same log and reads the data back.
 //
@@ -27,8 +27,8 @@
 //   the runtime API in the spike yet. The script uses independent
 //   principalFromSeed identities for the bundle flow; the runtime DID is
 //   what it auto-generates from its corestore primaryKey. The integration
-//   point between bundle and runtime is the workspaceId → topic derivation,
-//   which IS unified.
+//   point between bundle and runtime is the manifest's topic, which both
+//   peers read.
 // - Topic-layer auth (issue #10) doesn't yet gate connections by UCAN. Any
 //   peer with the topic can join today; production gates at the noise
 //   handshake.
@@ -36,7 +36,6 @@
 // This is the "first cohesive end-to-end" demo. Each gap above is its own
 // tracked issue.
 
-import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,6 +48,7 @@ import {
   consumeBundle,
   writeBundleFolder,
   readBundleFolder,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
 } from '@workspace.sh/portable-bootstrap';
 
@@ -64,12 +64,6 @@ function log(msg: string): void {
   console.log(`[demo] ${msg}`);
 }
 
-function topicFromWorkspaceId(workspaceId: string): string {
-  // The workspace's topic is a deterministic function of the workspaceId
-  // (which IS the root pubkey). Both peers derive the same topic from the
-  // same workspaceId — no out-of-band topic exchange needed.
-  return createHash('sha256').update(`workspace://${workspaceId}`).digest('hex');
-}
 
 function seededKey(byte: number): { publicKey: Buffer; secretKey: Buffer } {
   const seed = new Uint8Array(32);
@@ -113,16 +107,12 @@ async function main(): Promise<void> {
     // eslint-disable-next-line no-restricted-globals
     crypto.getRandomValues(k0Org);
 
-    // workspaceId is the root pubkey, multibase-encoded. We use the raw bytes
-    // from rootKp for the demo's topic derivation; the actual multibase form
-    // would be the URI-layer identifier.
-    const workspaceIdBytes = rootKp.publicKey;
-    const workspaceId = workspaceIdBytes.toString('hex');
+    // The workspace id is the root DID's multibase key, as a link carries it.
+    const workspaceId = workspaceIdForRoot(root.did());
     const resource = `workspace://v1/${workspaceId}`;
     const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
 
     const bundle = await createBundle({
-      workspaceId,
       createdAt: Math.floor(Date.now() / 1000),
       root,
       rootSecretKey: rootKp.secretKey,
@@ -180,10 +170,10 @@ async function main(): Promise<void> {
     log(`peer B: workspaceId matches: ${view.workspaceId === workspaceId ? '✓' : '✗'}`);
 
     // -----------------------------------------------------------------------
-    // 6. Both peers join the workspace's topic, derived from workspaceId
+    // 6. Both peers join the topic the manifest names
     // -----------------------------------------------------------------------
-    const topic = topicFromWorkspaceId(workspaceId);
-    log(`joining topic derived from workspaceId: ${topic.slice(0, 16)}…`);
+    const topic = restoredBundle.manifest.topicId;
+    log(`joining the manifest's topic: ${topic.slice(0, 16)}…`);
     await peerA.joinTopic(topic);
     await peerB.joinTopic(topic);
 
@@ -228,7 +218,7 @@ async function main(): Promise<void> {
     log('  - bundle round-tripped through .workspace/ on disk');
     log('  - root attestation verified across the boundary');
     log('  - envelope sealed to bob unwrapped K0_org cleanly');
-    log('  - topic derived from workspaceId reached both peers');
+    log("  - the manifest's topic reached both peers");
     log('  - Hypercore log replicated under that topic via Hyperswarm');
   } finally {
     await rm(tmpBase, { recursive: true, force: true });

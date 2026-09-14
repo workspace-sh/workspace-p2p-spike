@@ -19,6 +19,61 @@
     "./spawned": {
       "types": "./src/runtime.spawned.ts",
       "default": "./src/runtime.spawned.ts"
+    },
+    "./ipc": {
+      "types": "./src/ipc/index.ts",
+      "default": "./src/ipc/index.ts"
+    },
+    "./ipc/framing": {
+      "types": "./src/ipc/framing.ts",
+      "default": "./src/ipc/framing.ts"
+    },
+    "./ipc/macos": {
+      "types": "./src/ipc/transport.macos.ts",
+      "default": "./src/ipc/transport.macos.ts"
+    },
+    "./ios": {
+      "types": "./src/runtime.ios.ts",
+      "default": "./src/runtime.ios.ts"
+    },
+    "./android": {
+      "types": "./src/runtime.android.ts",
+      "default": "./src/runtime.android.ts"
+    },
+    "./ipc/ios": {
+      "types": "./src/ipc/transport.ios.ts",
+      "default": "./src/ipc/transport.ios.ts"
+    },
+    "./shims/crypto": {
+      "types": "./src/shims/crypto.ts",
+      "default": "./src/shims/crypto.ts"
+    }
+  },
+  "_imports_note": [
+    "Host-conditional builtins, the convention used by hypercore, hyperswarm and",
+    "rocksdb-native. Under Bare these resolve to the bare-* shims; under Node the",
+    "map is inert (Node only consults `imports` for `#`-prefixed specifiers) and",
+    "`fs` / `os` / `path` resolve to the builtins as usual.",
+    "This is what lets runtime.node.ts pack into a Bare worklet bundle. Import the",
+    "UNPREFIXED specifiers in source — `node:fs` bypasses this map entirely and",
+    "breaks the mobile bundle (#229)."
+  ],
+  "imports": {
+    "fs": {
+      "bare": "bare-fs",
+      "default": "fs"
+    },
+    "fs/promises": {
+      "bare": "bare-fs/promises",
+      "default": "fs/promises"
+    },
+    "os": {
+      "bare": "bare-os",
+      "default": "os"
+    },
+    "path": {
+      "bare": "bare-path",
+      "default": "path"
     }
   },
   "scripts": {
@@ -30,11 +85,27 @@
   },
   "dependencies": {
     "b4a": "1.8.0",
+    "bare-fs": "4.7.4",
+    "bare-os": "3.9.3",
+    "bare-path": "3.1.1",
+    "compact-encoding": "3.3.0",
     "corestore": "7.9.2",
-    "hyperswarm": "4.17.0"
+    "hypercore": "11.33.5",
+    "hypercore-crypto": "3.7.0",
+    "hyperswarm": "4.17.0",
+    "protomux": "^3.11.0",
+    "sodium-universal": "5.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "typescript": "^5.6.0"
+  },
+  "peerDependencies": {
+    "react-native": "*"
+  },
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    }
   }
 }

@@ -8,19 +8,16 @@
 //   4. Prepend multibase prefix 'z' (base58btc)
 //   5. Prepend 'did:key:'
 //
-// Result: did:key:z6Mk... (the standard form used by ucanto / UCAN tooling)
-//
-// This replaces the spike placeholder (did:key:z<hex>) with a value that
-// ucanto will accept as a valid DID when building delegation chains.
+// Result: did:key:z6Mk... (the standard form UCAN tooling uses)
 
-import { createRequire } from 'node:module';
+import b4a from 'b4a';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import hypercoreCryptoModule from 'hypercore-crypto';
 import type { Did } from './types.ts';
-
-const require = createRequire(import.meta.url);
 
 // hypercore-crypto is a transitive dep of corestore — always present.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const hypercoreCrypto = require('hypercore-crypto') as any;
+const hypercoreCrypto = hypercoreCryptoModule as any;
 
 // ---------------------------------------------------------------------------
 // base58btc — minimal implementation (no external dep needed)
@@ -107,7 +104,7 @@ const ED25519_PUB_MULTICODEC = new Uint8Array([0xed, 0x01]);
  * Derive a standards-compliant `did:key` from a Corestore primaryKey.
  *
  * @param seed  The 32-byte primaryKey from `corestore.primaryKey`.
- * @returns     A `did:key:z6Mk…` string compatible with ucanto / UCAN tooling.
+ * @returns     A `did:key:z6Mk…` string, the form UCAN tooling uses.
  */
 export function didFromSeed(seed: Uint8Array): Did {
   return didFromPublicKey(keyPairFromSeed(seed).publicKey);
@@ -126,9 +123,9 @@ export function keyPairFromSeed(seed: Uint8Array): {
   if (seed.length !== 32) {
     throw new Error(`seed must be 32 bytes, got ${seed.length}`);
   }
-  const kp = hypercoreCrypto.keyPair(Buffer.from(seed)) as {
-    publicKey: Buffer;
-    secretKey: Buffer;
+  const kp = hypercoreCrypto.keyPair(b4a.from(seed)) as {
+    publicKey: Uint8Array;
+    secretKey: Uint8Array;
   };
   return { publicKey: new Uint8Array(kp.publicKey), secretKey: new Uint8Array(kp.secretKey) };
 }
