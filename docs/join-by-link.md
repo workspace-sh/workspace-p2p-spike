@@ -210,6 +210,45 @@ exchanging IDs, and Option B as not planned unless short links become necessary.
 
 ---
 
+## Decide 3 — joining without being invited first
+
+A device holding only the workspace's key cannot pass the gate. It could instead
+*ask*: send its device ID and a message, have an admin's app show the request,
+and have the admin accept (Share… for that ID) or ignore it. Asking grants
+nothing, so it is not a confidentiality hole. What it changes:
+
+- **Members answer strangers.** A request is received before the gate, which is
+  the unauthenticated surface Option B also opens: rate limits, size limits, and
+  `threat-model.md`'s "cannot join the swarm" would need restating.
+- **A published key becomes a flood.** Anyone who finds the key can reach online
+  members and fill the inbox.
+- **A request says nothing about who sent it.** A device ID is a random key and a
+  typed name is a claim anyone can make.
+
+Ways to tell a wanted request from an unwanted one, strongest first:
+
+1. **A code the admin sent.** A request carrying a valid single-use, expiring
+   invite code is one the admin made possible. This is Option C: claiming the
+   link *is* the request. Requests without a code are not accepted, so a bare
+   key reaches no inbox.
+2. **A spoken check.** Show words derived from the requesting device's key on
+   both screens, confirmed over a call (as Signal's safety numbers do). Defeats a
+   lookalike request.
+3. **Devices already known** from other shared workspaces, shown by name.
+4. **A self-described name**, only ever as a hint.
+
+If a key leaks anyway, rotating the topic (possible once `topicId` is in the
+signed manifest, Decide 1) moves current members to a topic the flood does not
+know.
+
+**Recommendation:** no requests from a bare key. "Without inviting first" is
+Option C, single-use and expiring, optionally with the spoken check, approved by
+an admin or a Lighthouse. An open "request access" mode for workspaces meant to
+be public comes later, opt-in per workspace in `policy.json`, with rate limits
+and topic rotation as its escape hatch.
+
+**Decide:** agree, or open requests sooner?
+
 ## Implementation order (after the decisions)
 
 1. Identifiers and attestation (Decide 1), with dual-read for existing folders.
