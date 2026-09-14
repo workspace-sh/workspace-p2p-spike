@@ -74,6 +74,9 @@ Two notes for the folder:
   (`yarn p2p:smoke:two-device`) and with the Linux app as the recipient.
 - **Step 6** verifies every link's signature, the chain to the root, and that
   the capability names this workspace (workspace#430, #448).
+- **One identifier everywhere.** The manifest, the UCAN resource and a link all
+  name the workspace by its root DID's multibase key, and the attestation signs
+  the topic and the log keys (Decide 1, workspace#466).
 
 A link that replaces the folder is the gap.
 
@@ -84,8 +87,7 @@ A link that replaces the folder is the gap.
    is inside the envelope it is trying to fetch. `uri-scheme.md` § Resolution
    flow says "fetch `manifest.json` + `attestation.json` from any peer" without
    saying how, before or around the gate.
-2. **Identifiers disagree.** See Decide 1.
-3. **Nothing handles `workspace://`** on any platform yet (workspace#236).
+2. **Nothing handles `workspace://`** on any platform yet (workspace#236).
 
 Whatever a link carries, **the admin still needs B's device key before B can
 read**, because K0 is sealed to it. A link changes how the envelope travels,
@@ -96,48 +98,24 @@ that exchange online.
 
 ## Decide 1 — the workspace id, the topic, and what the attestation signs
 
-Today's implementation and the spec differ:
+**Decided** (14 Sep 2026) and built in workspace-sh/workspace#466:
 
-| | Spec | Implementation |
-|---|---|---|
-| `workspaceId` | multibase base58btc of the root key (`z6Mk…`) | hex of the root key |
-| UCAN resource | `workspace://v1/<z…>` | `workspace://v1/<hex>` |
-| Topic | SHA-256 of the root key bytes | SHA-256 of the string `workspace://<hex>` |
-| `manifest.topicId` | present | absent |
-| Attestation covers | `workspaceId`, `createdAt`, `formatVersion` | the same, not `logs` |
+- **Id.** `workspaceId` is the root DID's multibase key (`z6Mk…`), as
+  `uri-scheme.md` says. The manifest, the UCAN resource (`workspace://v1/<z…>`)
+  and links use it. A reader refuses a manifest whose id is not its root's key.
+- **Topic.** `manifest.topicId` is SHA-256 of the root's 32-byte public key for
+  a new workspace, the topic a link holder derives. Peers join the topic the
+  manifest names, so the topic can rotate (`permissions-model.md` Lever 2)
+  without the id changing.
+- **Attestation.** It signs `topicId` and `logs` with `workspaceId`,
+  `createdAt` and `formatVersion`. A manifest pointing at other logs or another
+  topic is refused, so a member cannot hand someone a folder whose manifest
+  points at logs the member wrote.
+- **Format 2, no migration.** Workspace is pre-alpha; folders made before are
+  refused with a message to recreate them.
 
-The key bytes are the same in both; only representation and derivation differ.
-
-**Why it matters beyond tidiness.**
-
-- A device following `uri-scheme.md` would derive a different topic from a link
-  and find no one.
-- `core/src/uri.ts` rejects hex identifiers.
-- Log keys are not signed, so a tampered manifest can point a reader at other
-  logs. A member holds K0 and could hand someone a folder whose manifest points
-  at logs the member wrote; the reader would take them as the workspace's.
-  Confidentiality holds; integrity does not.
-- The spec's topic-layer revocation (`permissions-model.md` Lever 2) rotates the
-  topic. A topic fixed by the root key cannot rotate; a topic named in a signed
-  manifest can.
-
-**Recommendation.**
-
-1. Keep the id as the root key's bytes; write it as multibase `z…` everywhere
-   it is serialised (manifest, UCAN resource, links), as the spec says. Readers
-   accept hex for workspaces made before the change.
-2. Put `topicId` in the manifest, initially SHA-256 of the root key bytes as the
-   spec says, and join the manifest's topic rather than deriving one.
-3. Sign `logs` and `topicId` in the attestation (`formatVersion: 1`). Readers
-   verify version 0 attestations as today.
-4. Pre-alpha, no migration of old workspaces: workspaces created before this
-   keep working through the hex/version-0 read paths, and can be recreated.
-   Workspaces the macOS app created have no stored root key, so they could not
-   be re-signed anyway.
-
-**Decide:** agree to 1–4, or keep hex and amend the spec instead.
-
----
+The spec records the result in `workspace-format.md` § manifest.json and
+§ attestation.json (#56).
 
 ## Decide 2 — how a link delivers the envelope
 
@@ -408,7 +386,7 @@ Autobase's settled order:
 
 ## Implementation order (after the decisions)
 
-1. Identifiers and attestation (Decide 1), with dual-read for existing folders.
+1. ~~Identifiers and attestation (Decide 1)~~: done, workspace#466.
 2. Post-gate bootstrap message: a member sends the manifest and attestation to
    an admitted peer that lacks them.
 3. Link encode/decode in `@workspace.sh/core` (`uri.ts` already parses the
