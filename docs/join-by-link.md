@@ -249,6 +249,66 @@ and topic rotation as its escape hatch.
 
 **Decide:** agree, or open requests sooner?
 
+## Decide 4 — public workspaces, and permissions inside private ones
+
+### Public workspaces
+
+The spec has one kind of workspace: private, joined by envelope. A public one,
+in the way a Dat archive or a torrent is public, is a different mode rather
+than an exception to the gate.
+
+What makes those public is that **the link is the read capability**: no gate,
+anyone holding it replicates, anyone replicating can serve others, and nothing
+once published can be withdrawn. For a workspace that means three access modes,
+named in the root-signed `policy.json` so every member enforces the same one:
+
+| Mode | Who reads | Gate | Content key | How it is found |
+|---|---|---|---|---|
+| **Private** (today) | Devices sealed an envelope | UCAN required | Sealed to each recipient | Folder, invitation, or link with an envelope |
+| **Anyone with the link** | Whoever holds the link | Admits any connection, read-only | Carried in the link's fragment | The link |
+| **Listed** | Anyone | Admits any connection, read-only | Published with the listing, or public tier unencrypted | `discovery.md` (DNS TXT, `.well-known`) |
+
+In the two public modes:
+
+- **Writing** stays with the admin (single writer today); contributors come
+  with multi-writer.
+- **Every reader can serve.** A reader replicates to other readers, like a
+  torrent peer; a Lighthouse keeps the workspace available when no one else is
+  online.
+- **No inbox.** Readers take nothing an admin must grant, so there are no access
+  requests to flood. Requests, if any, are for *contributing*.
+- **Withdrawal is forward-only.** Rotating the key and topic stops future
+  updates reaching old links; copies already made stay made, as with any
+  published file.
+- **Anyone can see who else is reading**: every reader announces the topic, so
+  readers' network addresses are visible to each other. Worth saying in the UI.
+
+### Permissions inside a private workspace
+
+Read-only invites are today's member. Finer permissions, per document or per
+group, are two mechanisms working together, as `permissions-model.md` describes:
+
+- **Reading is decided by keys.** Replication hands every member the same
+  ciphertext; there is no server to refuse a file. What a member can read is
+  what they hold keys for: the workspace key K0 for public tier, and a group or
+  person's tier key (`K1_<group>`, `K2_<person>`) for gated documents or fields.
+- **UCAN says who was entitled to what, and authorises writes.** The delegation
+  chain records which keys a device was granted and by whom, gates connections,
+  and, once there are several writers, is what Autobase's apply step checks
+  before accepting an entry: does its author hold `document/edit` on that path
+  or group?
+
+Today every document is public tier (K0 only) and there is one writer, so a
+member reads everything and writes nothing. Tier keys and capability-checked
+writes are designed, not built.
+
+**Recommendation:** add `access: private | link | listed` to `policy.json`;
+build **anyone with the link** after Option A (it shares the link encoding and
+most of the join path); build tier keys with multi-writer, where per-group
+permissions start to mean something.
+
+**Decide:** the three modes, and link-mode next?
+
 ## Implementation order (after the decisions)
 
 1. Identifiers and attestation (Decide 1), with dual-read for existing folders.
