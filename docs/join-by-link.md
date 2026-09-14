@@ -335,6 +335,56 @@ under way); land capability-checked writes with multi-writer.
 
 **Decide:** this model as the direction?
 
+## Findings that settle three questions (14 Sep 2026)
+
+Sources and detail: [`permissions-prior-art.md`](./permissions-prior-art.md), plus the Holepunch
+sources cited here.
+
+### Removing a writer while they write
+
+Removal wins, and a write that landed during the removal is reverted: devices
+recompute the view when Autobase's order settles. Two guardrails:
+
+- **The cutoff is Autobase's signed order, not the writer's claim.** A removed
+  writer's device can author entries that claim to predate the removal. An entry
+  not in the indexer-signed order (`signedLength`) when the removal is signed is
+  not applied.
+- **No wall-clock checks inside `apply`.** UCAN expiry is checked when an entry is
+  ingested, or by causal position, so every device computes the same view.
+
+### Key rotation on removal
+
+- The Holepunch stack has no group key agreement. Autobase encrypts with one base
+  `encryptionKey`; blocks carry an encryption id and an internal encryption core
+  holds key material per id, but there is no documented rotation call
+  ([autobase `lib/encryption.js`](https://github.com/holepunchto/autobase/blob/main/lib/encryption.js),
+  [README](https://github.com/holepunchto/autobase)). `hypercore-encryption` looks
+  keys up by id ([README](https://github.com/holepunchto/hypercore-encryption)).
+- Autopass, Holepunch's open-source app on Autobase and `blind-pairing`, hands
+  invitees the shared encryption key and removes a member by removing their writer
+  only; the key is not rotated
+  ([index.js](https://github.com/holepunchto/autopass/blob/main/index.js)). Keet is
+  closed source and was not checked.
+- So the proven practice is "removal stops writing". Workspace goes one step
+  further with the two levers `permissions-model.md` already describes, built from
+  Hypercore primitives: a new key epoch (tagged by id) sealed to the remaining
+  members, and topic rotation. MLS needs a commit sequencer (RFC 9420 §14) and
+  BeeKEM is pre-alpha; neither is planned.
+
+### UCAN version
+
+- UCAN 1.0 is final (spec, delegation, invocation, 8 Jul 2026); revocation is
+  1.0.0-rc.1. It is not tied to IPFS: tokens are DAG-CBOR with a Varsig header,
+  verified offline.
+- `iso-ucan` implements the 1.0 shape (`sub`, `cmd`, policies, delegations,
+  invocations), latest 0.5.0 (Apr 2026), without a revocation module. `ucanto`
+  still targets 0.9.1; its "Upgrade to UCAN 1.0" issue has been open since Mar 2024
+  ([storacha/ucanto#345](https://github.com/storacha/ucanto/issues/345)).
+- **Direction:** move `@workspace.sh/ucan-boundary` to `iso-ucan`, with capabilities
+  as 1.0 commands (`/document/read`, `/document/edit`, `/document/publish`),
+  subject the workspace root, scope in the policy; implement revocation to rc.1,
+  stored inside the workspace.
+
 ## Implementation order (after the decisions)
 
 1. Identifiers and attestation (Decide 1), with dual-read for existing folders.
