@@ -422,7 +422,7 @@ address is never shared with the wider org.
 - **Wrap primitive** — X25519 ECDH sealing for delivery envelopes
   (`packages/p2p-runtime/src/wrap.ts`)
 - **Root attestation** — sign + verify over `(workspaceId, createdAt,
-  formatVersion)` (`packages/p2p-runtime/src/attestation.ts`)
+  formatVersion, topicId, logs)` (`packages/p2p-runtime/src/attestation.ts`)
 - **UCAN boundary** — UCAN 1.0 delegations through `iso-ucan`:
   issueDelegation; validateDelegation verifying every link's signature,
   delegation, subject, segment-bounded command, resource policy and
@@ -503,7 +503,8 @@ address is never shared with the wider org.
   each other (local / LAN / WAN) before this protocol takes over
 - [`FINDINGS.md`](../FINDINGS.md) — spike verdict + extraction checklist
 - [`docs/ucan-prior-research.md`](./ucan-prior-research.md) — UCAN
-  library notes (ucanto `canIssue` gotcha, library comparison)
+  library notes from the earlier spike (library comparison; ucanto
+  specifics predate the move to iso-ucan)
 - [`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md) —
   consumer-side view of this same model, per file type
 - [Issue #5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5) —
