@@ -8,7 +8,7 @@
 // Mirrors @workspace.sh/workspace's own Workspace class shape as closely as
 // possible so call sites read the same either way — but every method here is
 // an RPC round-trip, since the real Workspace instance lives in the child
-// (fs/sodium/ucanto/node:crypto only run there — see ../ipc/child.ts).
+// (fs/sodium/UCAN/node:crypto only run there — see ../ipc/child.ts).
 
 // `encode` comes from the framing entry point, NOT the `/ipc` barrel: the
 // barrel re-exports NodeTransport, and an ESM re-export loads eagerly, so a

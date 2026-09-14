@@ -115,7 +115,7 @@ export interface Envelope {
   recipient: Did;
   /** Resource URI the contained capability and key apply to. */
   resource: string;
-  /** ucanto delegation, serialised. */
+  /** UCAN delegation chain, serialised. */
   ucan: Uint8Array;
   /** Symmetric key wrapped to the recipient's ed25519 public key. */
   wrappedKey: Uint8Array;

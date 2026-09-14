@@ -4,7 +4,7 @@
 // Log-level IPC (createLog/appendBlock/etc). Reuses that package's transport
 // + framing primitives (@workspace.sh/p2p-runtime/ipc) but speaks its own
 // method registry, because the Workspace facade does real work — fs, sodium,
-// ucanto, node:crypto — that only runs inside the child process; the parent
+// UCAN, node:crypto — that only runs inside the child process; the parent
 // (RN/Hermes) never runs Workspace logic directly, only proxies calls to it.
 //
 // One child process can host multiple open Workspace instances, each

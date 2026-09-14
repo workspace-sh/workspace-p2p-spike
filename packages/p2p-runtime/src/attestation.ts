@@ -11,9 +11,9 @@
 // out-of-band channel (signed announcement, well-known URL, fingerprint
 // comparison). See `docs/threat-model.md` for the explicit framing.
 //
-// The signature lineage is ed25519 via `hypercore-crypto`, the same algorithm
-// used by ucanto's @noble/ed25519. Signatures produced here can be verified
-// by either implementation (and vice versa).
+// The signatures are ed25519 via `hypercore-crypto`, the algorithm the UCAN
+// boundary verifies with @noble/ed25519. Either implementation verifies the
+// other's signatures.
 
 import b4a from 'b4a';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

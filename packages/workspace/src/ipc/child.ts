@@ -5,7 +5,7 @@
 // instead of Log-level ones.
 //
 // Runs inside the spawned Node child process — the ONLY place this package's
-// fs/sodium/ucanto/node:crypto-heavy code actually executes. The RN/Hermes
+// fs/sodium/UCAN/node:crypto-heavy code actually executes. The RN/Hermes
 // side never imports @workspace.sh/workspace directly; it talks to this
 // class's counterpart on the wire via RemoteWorkspace (./remote.node.ts /
 // ./remote.macos.ts).
