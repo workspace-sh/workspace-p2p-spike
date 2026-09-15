@@ -90,9 +90,8 @@ A link that replaces the folder is the gap.
 2. **Nothing handles `workspace://`** on any platform yet (workspace#236).
 
 Whatever a link carries, **the admin still needs B's device key before B can
-read**, because K0 is sealed to it. A link changes how the envelope travels,
-not whether B's ID reaches the admin first — except in Option C, which moves
-that exchange online.
+read**, because K0 is sealed to it. The link is the same for everyone; what
+changes per device is whether a grant exists for it (Decide 2).
 
 ---
 
@@ -117,76 +116,71 @@ that exchange online.
 The spec records the result in `workspace-format.md` § manifest.json and
 § attestation.json (#56).
 
-## Decide 2 — how a link delivers the envelope
+## Decide 2 — one link for everyone
 
-Three shapes. All reveal the workspace's public key to whoever holds the link.
+**Decided** (15 Sep 2026): every member shares the same link,
+`workspace://v1/<root key>`, the way a Google Workspace URL is shared. Who gets
+in depends on the device that opens it:
 
-### What any link reveals
+| Google Workspace | Here |
+|---|---|
+| signed in as a person | the device's key, proven in the Noise handshake |
+| "shared with you" | an admin used Share… with this device's ID: a sealed grant exists for it |
+| "you don't have access" | no grant for this key (asking for access is Decide 3) |
 
-A link names the root key, so anyone holding it can derive or learn the topic
-and ask the DHT which addresses are announcing it: **the network addresses of
-the members who are online.** `uri-scheme.md` § What can leak currently lists
-"membership of the workspace" as not leaking; that is only true of *identities*,
-not of addresses, and should say so. No content, K0, or UCAN leaks from the key
-alone, and the gate refuses the connection.
+### How a device finds its grant: records on the DHT
 
-### Option A — envelope in the link (spec § Reserved: targeted-envelope URIs)
+Members never answer a device that has not passed the gate. The grant travels
+as HyperDHT records instead:
 
-```
-workspace://v1/<z-root-key>/invite/<z-recipient>#<base64url envelope>
-```
+1. **The grant.** The envelope's UCAN and wrapped key, binary-encoded, published
+   with `immutablePut`. Its address is the hash of its bytes.
+2. **The index.** A list of `(tag, grant hash)` pairs, published with
+   `mutablePut` under the **root key itself**. The DHT stores a mutable record
+   only with a valid signature from that key, so a record fetched at the id in
+   the link is the owner's.
+   `tag` = the first 16 bytes of SHA-256(`"workspace grant\0"` ‖ root key ‖
+   device key).
+3. **Joining.**
+   - From the link, the device takes the root key, fetches the index and looks
+     for its own tag.
+   - It fetches the grant by hash, validates the UCAN against the root DID, and
+     unwraps K0.
+   - It then joins the topic (SHA-256 of the root key) and presents its UCAN at
+     the gate like any member.
+   - The member it connects to sends the manifest and attestation after
+     admission.
 
-- The admin already has B's ID (as today) and puts B's envelope in the link, in
-  the fragment so it is not sent anywhere a URL is logged.
-- B's app verifies the envelope is addressed to B, validates the UCAN against
-  the root key in the link, unwraps K0, joins the topic, and presents its UCAN at
-  the gate like any member.
-- **After** admission, the member it connected to sends the manifest and
-  attestation on the authenticated channel (a `bootstrap` message on
-  `workspace/auth@1`, or a second channel opened only after the gate). B checks
-  the attestation against the root key from the link.
-- **Nothing is served before the gate.** Forwarding the link gives others
-  nothing: the envelope is sealed to B and the UCAN's audience is B.
-- Cost: a long link. Measured: the UCAN is 473 bytes and the whole envelope
-  base64url-encoded is about 1,240 characters, so a link is about 1.3 KB. Fine to
-  paste; it fits a QR code, but a dense one.
+**Measured.**
+- On a local testnet, a device holding only the link and its seed found its
+  grant, validated the UCAN and recovered K0. A device with no grant found no
+  tag, and a copied grant was refused: "envelope UCAN audience mismatch".
+- On the public DHT, from a home connection, records of up to 1,300 bytes
+  stored and fetched; 1,400 bytes timed out.
+- A grant is 507 bytes and an index entry 48 bytes, so a 1,000-byte index
+  holds about 20 pending grants.
 
-### Option B — envelope fetched before the gate (`uri-scheme.md` as written)
+**Keeping records alive.**
+- DHT nodes keep records for up to 48 hours. An online member re-publishes the
+  index and grants well inside that.
+- Anyone can refresh a signed mutable record or an immutable one without the
+  root key.
+- An entry leaves the index once its device has joined.
 
-```
-workspace://v1/<z-root-key>/invite/<z-recipient>
-```
+**What the records reveal** to anyone holding the link:
+- the number of pending grants;
+- for a device key someone already knows, whether it has a pending grant.
 
-- A new `workspace/bootstrap@1` channel that members answer **before** the gate,
-  serving the manifest, the attestation, and the envelope whose recipient is the
-  connection's Noise-proven key.
-- Short links, but members answer unauthenticated connections, which widens what
-  an attacker who has the key can do: probe whether an address holds an
-  envelope, and exercise parsing code before the gate. Needs rate limits and a
-  careful review of what the pre-gate manifest includes (log keys could be held
-  back until admission).
+No grant opens for any key but its recipient's. The link itself already reveals
+the addresses of members who are online, through the topic.
 
-### Option C — bearer invite, no device ID first (not in the spec)
+**When records are unavailable,** members answer one question before the gate:
+"is there a grant sealed to the key you just proved?" It is rate-limited and
+serves nothing else.
 
-- The link carries a one-time invite secret. B proves it holds the secret and
-  sends its device ID; a member online at that moment seals and returns B's
-  envelope. Holepunch's `blind-pairing` implements this pattern over HyperDHT
-  (`createInvite`, `addMember`/`onadd`, `addCandidate`) for Autobase keys.
-- Removes pasting a device ID, which is the friendliest shape.
-- Requires a member, or a Lighthouse (`lighthouse.md`), online when B claims it;
-  the invite must be single-use and expire, since whoever claims a forwarded link
-  first gets in; and the admin-side "who may confirm" rule needs defining.
-
-**QR codes:** Option A's link makes a dense QR code; Options B and C are short. If scanning a code is the main way people share, that favours C.
-
-**Recommendation:** Option A for alpha. It keeps the gate the first thing a
-connection meets, needs no new pre-authentication surface, and uses the envelope
-and gate that already work. Record Option C as the next step for sharing without
-exchanging IDs, and Option B as not planned unless short links become necessary.
-
-**Decide:** A for alpha, and C after?
-
----
+**Inviting someone whose device ID you do not have** is a single-use,
+expiring bearer invite, as Holepunch's `blind-pairing` does it, claimed while a
+member is online. It comes after this.
 
 ## Decide 3 — joining without being invited first
 
@@ -196,7 +190,7 @@ and have the admin accept (Share… for that ID) or ignore it. Asking grants
 nothing, so it is not a confidentiality hole. What it changes:
 
 - **Members answer strangers.** A request is received before the gate, which is
-  the unauthenticated surface Option B also opens: rate limits, size limits, and
+  an unauthenticated surface members otherwise never open: rate limits, size limits, and
   `threat-model.md`'s "cannot join the swarm" would need restating.
 - **A published key becomes a flood.** Anyone who finds the key can reach online
   members and fill the inbox.
@@ -206,8 +200,8 @@ nothing, so it is not a confidentiality hole. What it changes:
 Ways to tell a wanted request from an unwanted one, strongest first:
 
 1. **A code the admin sent.** A request carrying a valid single-use, expiring
-   invite code is one the admin made possible. This is Option C: claiming the
-   link *is* the request. Requests without a code are not accepted, so a bare
+   invite code is one the admin made possible. This is the bearer invite
+   (Decide 2): claiming it *is* the request. Requests without a code are not accepted, so a bare
    key reaches no inbox.
 2. **A spoken check.** Show words derived from the requesting device's key on
    both screens, confirmed over a call (as Signal's safety numbers do). Defeats a
@@ -220,7 +214,7 @@ signed manifest, Decide 1) moves current members to a topic the flood does not
 know.
 
 **Recommendation:** no requests from a bare key. "Without inviting first" is
-Option C, single-use and expiring, optionally with the spoken check, approved by
+a bearer invite, single-use and expiring, optionally with the spoken check, approved by
 an admin or a Lighthouse. An open "request access" mode for workspaces meant to
 be public comes later, opt-in per workspace in `policy.json`, with rate limits
 and topic rotation as its escape hatch.
@@ -307,7 +301,7 @@ authorisation, per-node keys for private reading. Not yet read closely here;
 its key hierarchy is the part most likely to carry over.
 
 **Recommendation:** adopt this single model as the direction. For alpha, ship
-link invites (Option A) on today's one-scope workspace; specify items 1–4 next,
+one link for everyone (Decide 2) on today's one-scope workspace; specify items 1–4 next,
 informed by WNFS, UCAN 1.0 and Ink & Switch's Keyhive and BeeKEM (research
 under way); land capability-checked writes with multi-writer.
 
@@ -387,12 +381,14 @@ Autobase's settled order:
 ## Implementation order (after the decisions)
 
 1. ~~Identifiers and attestation (Decide 1)~~: done, workspace#466.
-2. Post-gate bootstrap message: a member sends the manifest and attestation to
+2. Grant records: binary grant and index encoding (`portable-bootstrap`),
+   record put/get on the runtime (`p2p-runtime`), `invite` publishing and an
+   online member refreshing (`workspace`).
+3. Post-gate bootstrap message: a member sends the manifest and attestation to
    an admitted peer that lacks them.
-3. Link encode/decode in `@workspace.sh/core` (`uri.ts` already parses the
-   shape; add the envelope fragment).
-4. Linux: Copy Invite Link next to Export Invitation…; a `workspace://` handler
-   (`.desktop` `x-scheme-handler/workspace`) that opens the link.
+4. Join by link: `workspace` resolves a link to a folder (grant, topic, gate,
+   bootstrap); IPC method; Linux Copy Link on Share…, and a `workspace://`
+   handler (`.desktop` `x-scheme-handler/workspace`).
 5. A two-device smoke that joins from the link alone.
 
 ## Open questions
@@ -411,5 +407,5 @@ Autobase's settled order:
 - [`workspace-format.md`](./workspace-format.md) — manifest, attestation, envelopes, distribution shapes
 - [`permissions-model.md`](./permissions-model.md) — the gate, the two carriers, revocation levers
 - [`identity-recovery.md`](./identity-recovery.md) — device linking uses the same envelope
-- [`lighthouse.md`](./lighthouse.md) — an always-on member, for Option C
+- [`lighthouse.md`](./lighthouse.md) — an always-on member, for bearer invites
 - [`many-workspaces.md`](./many-workspaces.md) — one runtime, many workspaces
