@@ -1,7 +1,9 @@
 # Joining by link
 
-**Status:** proposal, 14 Sep 2026. Needs Leslie's decisions on the questions
-marked **Decide**. Nothing here is implemented except where it says so.
+**Status:** Leslie decided the join flow on 15 Sep 2026. Anything marked
+**default, pending Leslie** is built that way until Leslie says otherwise;
+anything under [Proposals](#proposals-not-decided) is not built. Nothing here is
+implemented except where it says so.
 
 How a device that has been shared a workspace gets from "someone sent me
 something" to "I am replicating it", and what a `workspace://` link has to
@@ -125,7 +127,10 @@ workspace://v1/<id>#invite=<code>    the same link, plus a bearer invite
 - **Stripping the fragment** leaves the plain link.
 - **Out of transit:** a fragment isn't sent to any server a URL passes through.
 - **One parser:** links are parsed in one place, so the pairing survives a change to the part before the fragment (spike #59, z-base-32 ids in the host position).
-- **The code:** `<code>` is a `blind-pairing` invite (`seed`, `discoveryKey`, `expires`), base64url-encoded.
+- **The code** (default, pending Leslie): a `blind-pairing` invite in z-base-32, the encoding Holepunch uses for keys.
+  - It leaves out the invite's discovery key, because the id already gives it: `crypto.discoveryKey(root key)`.
+  - What's left is a version, flags, the 32-byte seed and the expiry: 38 bytes, 61 characters.
+  - A whole invite link is about 130 characters.
 
 ### Share options
 
@@ -165,6 +170,34 @@ does for Keet and Pear rooms.
 
 Without the invite seed nothing happens: `candidate.open` fails, so no envelope is sealed. A leaked invite admits whoever claims it first, once, within 7 days. The admin can revoke it before then. An envelope sealed to a key the claimant doesn't hold is useless to them.
 
+**Refusals.** The admin's device answers a claim it won't admit with `candidate.deny({ status })`. `blind-pairing` has three statuses, and each gets its own message:
+
+| Invite | Status | Joiner sees |
+|---|---|---|
+| Expired | 3, and known from the code's expiry before anything is sent | "This invite has expired." |
+| Used | 2 | "This invite has already been used." |
+| Revoked | 1, `blind-pairing`'s "rejected"; an admin's device sends it only for a revoked invite | "This invite was revoked." |
+
+Each message ends "Ask for a new one."
+
+The admin's device keeps a record until its invite expires, so it can still answer "used" or "revoked". It never keeps the seed, so an outstanding invite can't be copied again; Copy Invite Link makes a new one.
+
+**Only the creating device admits.** The invite store is on the device that made the invite, so that device has to be online for the claim to complete, even if the workspace has other admin devices.
+
+### What the joiner sees
+
+| Opens | Sees |
+|---|---|
+| An invite link | "Joining…", then the workspace opens and syncs |
+| An invite link, admin's device offline | "Waiting for an admin to come online". This is a waiting state, not an error (default, pending Leslie). The claim stays open and retries while the app runs |
+| An expired, used or revoked invite | The refusal above |
+| A workspace link or folder, as a member | It opens |
+| A workspace link or folder, not a member, requests off | "You don't have access to this workspace. Ask the person who shared it for an invite link." |
+| The same, requests on | The same, plus **Ask to Join** |
+
+- **No name in a link.** Before admission the app knows only the folder name the joiner chose, or the folder's own name. A name carried in a link would be unverified text from whoever wrote the link.
+- **Progress and cancel.** A join reports its stages (claiming, waiting for an admin, finding the grant, connecting, syncing) and can be cancelled, over IPC.
+
 ### Requesting access
 
 `blind-pairing` needs an invite, so a request without one has its own channel.
@@ -187,10 +220,26 @@ Without the invite seed nothing happens: `candidate.open` fails, so no envelope 
 
 A request grants nothing until Accept.
 
+**Requests on or off.** With no admin online, "requests off" and "admin offline" look the same: nobody is on the request topic. So the grant index, which the root signs and a joiner already reads to find its grant, carries a flag saying whether requests are on. A joiner with no grant reads the flag and shows **Ask to Join** only when it's set.
+
 ### Constraints
 
 - **Nothing server-side.** The admitting device is online when a join completes.
 - **The gate, grant and welcome are unchanged.** Invites and requests only decide when `invite(deviceDid)` runs.
+
+### Proposals, not decided
+
+These wait for Leslie and aren't built.
+
+| Proposal | What it adds | Recommended |
+|---|---|---|
+| **Send Invite…** on a request | An action next to Accept and Decline. The system share sheet sends a single-use invite link to a contact the admin already knows. The code comparison stays | Yes |
+| **Known devices** | A local store of device keys with names the admin gave them. A request from a known device shows the admin's name for it, never the requester's | Yes |
+| **Request token** | `#request=<token>` on the plain link. It isn't secret; resetting it cuts off a leaked link without rotating the topic | Yes |
+| **Vouching** | A member relays a request and says who it is | Later |
+| **Proof-of-work** on requests | Makes each request cost the sender | No, unless spam is seen |
+| **QR codes** | Either link as a QR code, for sharing in person | Yes |
+| **Export `.workspace/` only** | Export Folder… offers the whole folder or `.workspace/` alone | Yes |
 
 ## Decide 1 — the workspace id, the topic, and what the attestation signs
 
@@ -458,14 +507,22 @@ Autobase's settled order:
    bootstrap); IPC method; Linux Copy Link on Share…, and a `workspace://`
    handler (`.desktop` `x-scheme-handler/workspace`).
 5. A two-device smoke that joins from the link alone.
-6. Invite links: `blind-pairing` claim, invite store on the admin's device,
-   paired-URI parsing, and an automatic claim on opening an invite link.
-7. Access requests: the request topic and `workspace/request@1` channel, the
-   commit-then-reveal code, limits, and the admin's inbox with Accept.
-8. Share options in each app: Copy Invite Link (default), Copy Workspace Link,
-   Export Folder…, Share with Device ID… (advanced), Allow requests to join.
-9. A smoke where a device joins from an invite link alone, and one where a
-   request is accepted after comparing codes.
+6. Links parsed in one place: the workspace link, `#invite=`, and z-base-32.
+7. Join progress and cancel over IPC, with the joiner's states above.
+8. Access requests (workspace#493). These need no new dependency:
+   - the request topic and `workspace/request@1` channel;
+   - the commit-then-reveal code and the limits;
+   - the requests flag in the grant index;
+   - the admin's inbox with Accept and Decline;
+   - a smoke where a request is accepted after comparing codes.
+9. Invite links (workspace#492), once Leslie approves `blind-pairing`:
+   - the invite store on the admin's device;
+   - the claim and its refusals;
+   - a smoke where a device joins from an invite link alone.
+10. Share options in each app (workspace#494–#496):
+    - Copy Invite Link (default), Copy Workspace Link and Export Folder…;
+    - Share with Device ID… (advanced);
+    - Allow requests to join.
 
 ## Open questions
 
