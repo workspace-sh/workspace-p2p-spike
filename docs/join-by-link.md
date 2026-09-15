@@ -89,11 +89,108 @@ A link that replaces the folder is the gap.
    saying how, before or around the gate.
 2. **Nothing handles `workspace://`** on any platform yet (workspace#236).
 
-Whatever a link carries, **the admin still needs B's device key before B can
-read**, because K0 is sealed to it. The link is the same for everyone; what
-changes per device is whether a grant exists for it (Decide 2).
+Whatever a link carries, **the admin's device still needs B's device key before B
+can read**, because K0 is sealed to it. An invite claim or an access request
+carries the key inside the app; Share with Device ID… carries it by hand. The
+link is the same for everyone; what changes per device is whether a grant
+exists for it (Decide 2).
 
 ---
+
+## How a person joins (decided 15 Sep 2026)
+
+Leslie approved this flow on 15 Sep 2026. It replaces copying a device ID
+to the admin as the normal way in. The Device ID dialog stays as an advanced
+option. One link for everyone, and grants on the DHT (Decide 2), remain the
+mechanism underneath: an invite or a request ends in exactly the grant, gate
+and welcome that already work.
+
+| Step | Admin | Joiner |
+|---|---|---|
+| 1 | Creates the workspace | — |
+| 2 | Shares an **invite link** (default), the **workspace link**, or the folder | — |
+| 3 | — | Opens what they were sent. An invite link is claimed automatically. A workspace link or folder without access shows "You don't have access" and **Ask to join** |
+| 4 | An invite is admitted automatically, within its limits. A request shows "'<name>' wants to join, code 482 913"; the admin checks the code with the joiner over a channel they already share (email, SMS, IM) and taps **Accept** | Shows the same code |
+| 5 | — | Access arrives; the workspace opens and syncs |
+
+### Links
+
+An invite is an optional fragment on the unchanged workspace link:
+
+```
+workspace://v1/<id>                  names the workspace, grants nothing
+workspace://v1/<id>#invite=<code>    the same link, plus a bearer invite
+```
+
+- **Stripping the fragment** leaves the plain link.
+- **Out of transit:** a fragment isn't sent to any server a URL passes through.
+- **One parser:** links are parsed in one place, so the pairing survives a change to the part before the fragment (spike #59, z-base-32 ids in the host position).
+- **The code:** `<code>` is a `blind-pairing` invite (`seed`, `discoveryKey`, `expires`), base64url-encoded.
+
+### Share options
+
+- **Copy Invite Link** (default)
+- **Copy Workspace Link**
+- **Export Folder…**: no invite inside; a folder grants nothing by itself
+- **Share with Device ID…** (advanced): today's flow, sealing to a pasted ID
+- **Allow requests to join:** a per-workspace switch
+
+### Decided defaults
+
+| Question | Decision (Leslie, 15 Sep 2026) |
+|---|---|
+| Invites | Single-use, expiring after 7 days ("yes!"). A reusable invite when the admin asks for one |
+| Requests | Off until the admin turns them on, per workspace ("sure!") |
+| Who admits | Admins only, for now ("okay!"). Delegating to members or a Lighthouse comes later |
+
+Parked: a folder carrying an invite ("park this thinking").
+
+### Claiming an invite
+
+Holepunch's `blind-pairing` (and `blind-pairing-core`) carries the claim, as it
+does for Keet and Pear rooms.
+
+1. **The admin's device creates the invite.** `createInvite(rootPublicKey, { expires })` gives `{ invite, publicKey, discoveryKey, id }`.
+   - The device keeps `{ id, publicKey, expires, usesLeft }` in its own data directory, never in the folder.
+   - The link carries `invite`.
+2. **While the admin's device is online** and has unexpired invites, it listens with `addMember({ discoveryKey, onadd })`.
+3. **The joiner's app claims.** From the fragment it runs `addCandidate({ invite, userData })`. `userData` is the joiner's device public key and a display name. The request is signed with the invite's key pair and encrypted to it.
+4. **In `onadd`, the admin's device:**
+   - calls `candidate.open(publicKey)`, which proves the claimant holds the invite seed;
+   - checks the invite is known, unexpired, has uses left, and isn't revoked;
+   - decrements the uses;
+   - calls `invite(deviceDid)`, sealing the envelope and publishing the grant;
+   - replies with `candidate.confirm({ key: rootPublicKey, additional: { data: envelope } })`.
+5. **The joiner** checks that `key` matches the link's root, validates the envelope's UCAN against the root DID, and unwraps K0. It then joins as a device with a grant: topic, gate, welcome.
+
+Without the invite seed nothing happens: `candidate.open` fails, so no envelope is sealed. A leaked invite admits whoever claims it first, once, within 7 days. The admin can revoke it before then. An envelope sealed to a key the claimant doesn't hold is useless to them.
+
+### Requesting access
+
+`blind-pairing` needs an invite, so a request without one has its own channel.
+
+1. **Where requests go.** An admin device with requests turned on joins a request topic, SHA-256(`"workspace requests\0"` ‖ root key). Members who aren't admins never join it, so they never answer strangers.
+2. **The request.** On a Protomux channel `workspace/request@1`, the joiner's device sends `{ name, commitment }` over the Noise connection, which proves the joiner's device key.
+   - `name` is at most 64 characters.
+   - `commitment` = SHA-256(`nR`), for a random 32-byte `nR`.
+3. **The exchange.** The admin's device replies `{ nA }`, a random 32-byte nonce. The joiner reveals `nR`, and the admin checks it against the commitment.
+4. **The code.** Both devices show the same code: the first 20 bits of SHA-256(`"workspace join code\0"` ‖ workspace id ‖ joiner key ‖ admin key ‖ `nR` ‖ `nA`), as 6 digits.
+5. **Accept.** It runs `invite(deviceDid)` for the joiner's key and sends the sealed envelope on the same channel. Ignore or Decline sends nothing.
+
+**Why commit-then-reveal.** A 6-digit code is 20 bits. Without the commitment, someone between the two devices could try keys until the codes on both sides match, about a million tries, which takes seconds. With it, each side's nonce is fixed before the other's is seen, so there is nothing to grind. This is how Bluetooth numeric comparison and ZRTP make short codes safe.
+
+**Limits:**
+- one pending request per device key;
+- a few requests a minute per remote address;
+- requests expire after 10 minutes;
+- the inbox holds at most 20.
+
+A request grants nothing until Accept.
+
+### Constraints
+
+- **Nothing server-side.** The admitting device is online when a join completes.
+- **The gate, grant and welcome are unchanged.** Invites and requests only decide when `invite(deviceDid)` runs.
 
 ## Decide 1 — the workspace id, the topic, and what the attestation signs
 
@@ -125,7 +222,7 @@ in depends on the device that opens it:
 | Google Workspace | Here |
 |---|---|
 | signed in as a person | the device's key, proven in the Noise handshake |
-| "shared with you" | an admin used Share… with this device's ID: a sealed grant exists for it |
+| "shared with you" | the device claimed an invite, had a request accepted, or was shared with by device ID: a sealed grant exists for it |
 | "you don't have access" | no grant for this key (asking for access is Decide 3) |
 
 ### How a device finds its grant: records on the DHT
@@ -178,48 +275,19 @@ the addresses of members who are online, through the topic.
 "is there a grant sealed to the key you just proved?" It is rate-limited and
 serves nothing else.
 
-**Inviting someone whose device ID you do not have** is a single-use,
-expiring bearer invite, as Holepunch's `blind-pairing` does it, claimed while a
-member is online. It comes after this.
+**Inviting someone whose device ID you do not have** is an invite link, the
+normal way in since 15 Sep 2026 (see [How a person joins](#how-a-person-joins-decided-15-sep-2026)).
 
 ## Decide 3 — joining without being invited first
 
-A device holding only the workspace's key cannot pass the gate. It could instead
-*ask*: send its device ID and a message, have an admin's app show the request,
-and have the admin accept (Share… for that ID) or ignore it. Asking grants
-nothing, so it is not a confidentiality hole. What it changes:
+**Decided** (15 Sep 2026): a device can ask to join.
+- Requests are off until an admin turns them on for the workspace.
+- A request is confirmed by a code both screens show and the two people compare over a channel they already share.
+- An invite link is the other way in without an admin knowing the device first.
 
-- **Members answer strangers.** A request is received before the gate, which is
-  an unauthenticated surface members otherwise never open: rate limits, size limits, and
-  `threat-model.md`'s "cannot join the swarm" would need restating.
-- **A published key becomes a flood.** Anyone who finds the key can reach online
-  members and fill the inbox.
-- **A request says nothing about who sent it.** A device ID is a random key and a
-  typed name is a claim anyone can make.
+Both are specified under [How a person joins](#how-a-person-joins-decided-15-sep-2026).
 
-Ways to tell a wanted request from an unwanted one, strongest first:
-
-1. **A code the admin sent.** A request carrying a valid single-use, expiring
-   invite code is one the admin made possible. This is the bearer invite
-   (Decide 2): claiming it *is* the request. Requests without a code are not accepted, so a bare
-   key reaches no inbox.
-2. **A spoken check.** Show words derived from the requesting device's key on
-   both screens, confirmed over a call (as Signal's safety numbers do). Defeats a
-   lookalike request.
-3. **Devices already known** from other shared workspaces, shown by name.
-4. **A self-described name**, only ever as a hint.
-
-If a key leaks anyway, rotating the topic (possible once `topicId` is in the
-signed manifest, Decide 1) moves current members to a topic the flood does not
-know.
-
-**Recommendation:** no requests from a bare key. "Without inviting first" is
-a bearer invite, single-use and expiring, optionally with the spoken check, approved by
-an admin or a Lighthouse. An open "request access" mode for workspaces meant to
-be public comes later, opt-in per workspace in `policy.json`, with rate limits
-and topic rotation as its escape hatch.
-
-**Decide:** agree, or open requests sooner?
+A request grants nothing. It is rate-limited, size-capped and expiring, and the inbox is capped. Only admins' devices listen for requests, on a topic of their own, so members never answer strangers. If a workspace's key leaks anyway, rotating the topic (Decide 1) moves members to a topic the flood does not know.
 
 ## Decide 4 — one permission model for private and public
 
@@ -390,6 +458,14 @@ Autobase's settled order:
    bootstrap); IPC method; Linux Copy Link on Share…, and a `workspace://`
    handler (`.desktop` `x-scheme-handler/workspace`).
 5. A two-device smoke that joins from the link alone.
+6. Invite links: `blind-pairing` claim, invite store on the admin's device,
+   paired-URI parsing, and an automatic claim on opening an invite link.
+7. Access requests: the request topic and `workspace/request@1` channel, the
+   commit-then-reveal code, limits, and the admin's inbox with Accept.
+8. Share options in each app: Copy Invite Link (default), Copy Workspace Link,
+   Export Folder…, Share with Device ID… (advanced), Allow requests to join.
+9. A smoke where a device joins from an invite link alone, and one where a
+   request is accepted after comparing codes.
 
 ## Open questions
 
