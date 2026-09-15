@@ -222,6 +222,15 @@ The admin's device keeps a record until its invite expires, so it can still answ
 
 A request grants nothing until Accept.
 
+**Requests and the gate.** A request is heard without its device being let in:
+
+1. **Topics.** An admin's device with requests on announces the request topic, `swarm.join(topic, { server: true, client: false })`. An asking device looks it up, `{ server: false, client: true }`. Hyperswarm keeps one connection per pair of devices whichever topic found it, so the gate can't tell a request's connection from a member's by topic; what the peer sends decides.
+2. **No proof, no auth message.** A device without a grant sends nothing on `workspace/auth@1`. Today it sends an empty proof, which a member refuses at once, closing the connection before a request could open.
+3. **Pairing.** A runtime pairs `workspace/request@1` only while its workspace has requests on. Otherwise Protomux refuses the channel and the auth timeout drops the connection, as it does today.
+4. **An open request.** When a peer opens the request channel before presenting a proof, its auth timeout is replaced by the request's 10-minute expiry, and the request goes to the inbox under its limits. The connection is never admitted: nothing replicates and it isn't counted as a peer. Accept sends the envelope on the channel; Accept, Decline and expiry each close the connection.
+5. **After Accept.** The asking device connects again on the workspace topic as a member, presenting the UCAN from its envelope.
+6. **Trust.** The asking device doesn't need to verify who answered. The compared code binds both device keys, and it accepts an envelope only if the UCAN inside validates to the link's root.
+
 **Requests on or off.** With no admin online, "requests off" and "admin offline" look the same: nobody is on the request topic. So the grant index, which the root signs and a joiner already reads to find its grant, carries a flag saying whether requests are on. A joiner with no grant reads the flag and shows **Ask to Join** only when it's set.
 
 ### Constraints
