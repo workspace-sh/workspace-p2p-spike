@@ -191,12 +191,14 @@ The admin's device keeps a record until its invite expires, so it can still answ
 | An invite link | "Joining…", then the workspace opens and syncs |
 | An invite link, admin's device offline | "Waiting for an admin to come online". This is a waiting state, not an error (default, pending Leslie). The claim stays open and retries while the app runs |
 | An expired, used or revoked invite | The refusal above |
+| A workspace link, with a grant, no member online | "Waiting for someone in the workspace to come online", until a member comes online or the person cancels |
 | A workspace link or folder, as a member | It opens |
 | A workspace link or folder, not a member, requests off | "You don't have access to this workspace. Ask the person who shared it for an invite link." |
 | The same, requests on | The same, plus **Ask to Join** |
 
 - **No name in a link.** Before admission the app knows only the folder name the joiner chose, or the folder's own name. A name carried in a link would be unverified text from whoever wrote the link.
-- **Progress and cancel.** A join reports its stages (claiming, waiting for an admin, finding the grant, connecting, syncing) and can be cancelled, over IPC.
+- **Progress and cancel.** A join reports its stages over IPC and can be cancelled (workspace#499): `finding-grant`, `connecting`, `waiting-for-member` (after 5 s with no member), `opening`. With the grant found, an app waits for a member until the person cancels.
+  - Invite links will add `claiming` and `waiting-for-admin` before these.
 
 ### Requesting access
 
@@ -507,8 +509,8 @@ Autobase's settled order:
    bootstrap); IPC method; Linux Copy Link on Share…, and a `workspace://`
    handler (`.desktop` `x-scheme-handler/workspace`).
 5. A two-device smoke that joins from the link alone.
-6. Links parsed in one place: the workspace link, `#invite=`, and z-base-32.
-7. Join progress and cancel over IPC, with the joiner's states above.
+6. Links parsed in one place: the workspace link, `#invite=`, and z-base-32 (workspace#498).
+7. Join progress and cancel over IPC, with the joiner's states above (workspace#499).
 8. Access requests (workspace#493). These need no new dependency:
    - the request topic and `workspace/request@1` channel;
    - the commit-then-reveal code and the limits;
