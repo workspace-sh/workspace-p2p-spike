@@ -53,7 +53,7 @@ workspace://v1/<workspace-pubkey>[/<path>][?<query>][#<fragment>]
 - `v1` — the URI scheme version, in the path
 - `<workspace-pubkey>` — the workspace's root identity, multibase-encoded
 - `<path>` — optional path components for sub-addressing (documents, sub-resources, comments, etc.)
-- `<query>` — optional non-routing metadata (relay hints, friendly hints, etc.)
+- `<query>` — optional non-routing metadata (relay hints)
 - `<fragment>` — optional client-local view state (scroll position, expansion state, etc.), or an invite code; never used for routing
 
 Routing breaks into two layers:
@@ -61,7 +61,7 @@ Routing breaks into two layers:
 - **Routing-critical** — the workspace pubkey and the document ID. These resolve to a specific document and must succeed. If they fail, the URI is broken.
 - **Best-effort refinement** — the sub-resource locator (the path segment after `document/<id>`). If a locator doesn't match anything in the current document (heading renamed, row deleted, node removed), the app **soft-fails to the document root**. The user lands in the correct document, just not scrolled to the anchor. Same behaviour as Notion / Google Docs section links.
 
-Query strings carry only optional hints. Fragments carry client-local view state and invite codes, neither of which routes. This isolates routing from the parts of a URL that some chat apps mangle when generating previews.
+Query strings carry only relay hints. Fragments carry client-local view state and invite codes, neither of which routes. This isolates routing from the parts of a URL that some chat apps mangle when generating previews.
 
 ---
 
@@ -282,7 +282,6 @@ Reserved query parameters (all optional, never required for routing):
 | Parameter | Meaning | Format | Notes |
 |---|---|---|---|
 | `relays` | bootstrap relay hints | comma-separated hostnames or URLs | `?relays=public.workspace.sh,relay.acme.internal` |
-| `hint` | friendly workspace-name hint for chat-app previews | a string | cosmetic only; app reconciles against the manifest at open time |
 | `at` (reserved) | "open at this version/time" | timestamp | reserved for future time-travel UX |
 
 All are optional. URIs with no query string work the same. Parsers that don't recognise a parameter ignore it.
@@ -320,21 +319,20 @@ workspace://v1/z6Mk…#invite=<code>
 - **Order.** A parser reads `invite` from the fragment's `&`-separated parameters, and a formatter writes it first.
 - **`stripFragmentsOnShare`** doesn't remove it: an admin makes an invite link on purpose.
 
-### Visible / human-readable slugs — fragment-only, never path or query
+### No names in a link
 
-If a client (Workspace's or a third party's) ever offers a UX feature that adds a human-readable hint to a shared URI for at-a-glance preview — e.g. so a chat-app preview shows the reader "this points to the *Reporting Process* section" — that hint **MUST** ride in the fragment, never in the path or query.
+A link never carries a name — not the workspace's, not a heading's, whether in
+the path, the query or the fragment (Leslie, 16 Sep 2026). A name in a link is
+text written by whoever wrote the link, so an app that showed it would be
+repeating a stranger's claim about which workspace this is, and a link would
+leak the name to every channel it passes through.
 
-```
-workspace://v1/z6Mk…/document/4Hp8…/9MnPpQrStUv#hint=reporting-process
-```
-
-Reasoning:
-
-- Path placement would leak the semantic content through every URL-bearing channel (history, logs, screenshots) — defeating the whole reason locators are opaque IDs in the first place.
-- Query placement carries the same leak; query strings are sometimes mangled but they still travel in most contexts.
-- Fragment placement keeps the hint client-local. Routing intermediaries strip or ignore fragments; preview generators that present the URL pre-strip the fragment; the URL's authoritative form (what gets indexed, what's stored in browser history at the server-visible level) doesn't carry it.
-
-The hint is also a **snapshot-at-share-time**: it reflects what the heading was called when the URL was generated. If the heading is later renamed, the hint goes stale. That's harmless — the URL still routes correctly via the opaque ID in the path; the stale hint is just a cosmetic mismatch.
+A name shown before a device is let in has to come from something the root
+signed. The grant index a joiner already reads is the natural carrier, opt-in
+per workspace, and it proves only that the workspace's owner calls it that.
+Proving whose workspace it is needs a domain paired with it in both directions
+— a DNS record naming the workspace, and a signed claim naming the domain —
+which is where this is going.
 
 Workspaces with strict privacy posture should use the `policy.json` workspace policy (see [`workspace-format.md`](./workspace-format.md)) to declare `stripFragmentsOnShare: true`, telling cooperating clients to strip any user-added fragments before producing a share link.
 
