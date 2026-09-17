@@ -81,6 +81,30 @@ reaches the same answer with no coordination. A same-entity collision still
 loses one side, and that side is kept: in history, and as a copy where a copy
 makes sense.
 
+### A clock that is wrong wins every argument
+
+Ties break on the author's clock. So a device whose clock is five minutes fast
+wins every collision it takes part in, whoever actually edited last, and
+nothing in the protocol notices. This is not hypothetical: two machines in this
+project were found 4–5 minutes apart on 17 Sep 2026, one of them simply not
+synchronised, and neither showed any sign of it.
+
+Three ways to stop it, and the first two are cheap:
+
+1. **Refuse an entry dated far ahead of what this device has already seen.**
+   An author's clock that is ahead of every clock a device has met is more
+   likely wrong than right. The bound is a decision; a few minutes is
+   defensible.
+2. **Carry a logical clock beside the wall clock.** Each writer's counter is at
+   least one more than the highest it has seen, so "later" survives a wrong
+   clock, and the wall clock stays for people to read.
+3. **Show the disagreement.** Two entries whose clocks disagree by more than
+   the bound are worth surfacing, rather than silently deciding.
+
+The version vector already says whether two edits were concurrent. The clock
+only decides between edits that genuinely were, which is the case this
+protects.
+
 **What this costs, said plainly.** Per-entity merge means the log stops carrying
 whole documents and starts carrying operations on entities, so every format
 needs a way to say what changed. That is
