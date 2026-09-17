@@ -181,12 +181,12 @@ What isn't:
 
 ## What still needs deciding, and when
 
-- **How a markdown block is identified across edits** — before slice 4, and it
-  is the crux of the whole thing. `workspace-format.md` § Per-format
-  reconciliation says markdown matches "by current heading text", which is a
-  start and not a rule: it says nothing about two paragraphs under one heading,
-  a heading being renamed, or a block being moved. This needs its own section
-  in the spec, with worked cases, before any code.
+- **How a markdown block is identified across edits** — proposed in
+  [`block-identity.md`](./block-identity.md), written with the prose model's
+  author. Identity lives in the log, never in the file; a save becomes one
+  change set of block operations; position merges separately from content; and
+  an editor that normalises markdown is the trap that would otherwise
+  overwrite a colleague's work. Four questions in it are Leslie's.
 - **Where the writer record lives** — the DHT, like grant records; the
   key-delivery log, which is the offline carrier; or both. Small, once slice 1
   starts.
