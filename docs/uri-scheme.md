@@ -507,15 +507,19 @@ Honest accounting of what an outsider (no workspace access) learns from a `works
 - The resource's *type category* (document / user / team), via the path namespace
 - For an invite link: a bearer invite, which admits whoever claims it first until it is used, expires or is revoked
 - For sub-resources via the locator: the locator form (structural address, opaque ID, or positional) — which narrows the format type. Not the locator's *meaning*.
+- **Who is in the workspace, as it is built today.** The id is also the topic, so a holder can join it and see which devices are online and from where; and the root-signed grant index lists every grant, each of which is a UCAN naming the device it was sealed for. So a URL is enough to enumerate a workspace's devices and watch when they appear. This is a gap rather than a design: it is tracked as workspace-sh/workspace#533, whose fix encrypts a grant under a key derived from the root and device keys together, so only someone who already knows a device can find its grant.
 
 What does NOT leak:
 
 - Contents
 - Resource names or titles (no slugs in canonical URIs; opaque IDs for semantic locators)
-- Membership of the workspace
 - Who created or owns the resource
 - When it was created
 - The workspace's friendly name
+
+Until workspace-sh/workspace#533 lands, treat a link as naming the workspace's
+devices as well as the workspace. A link shared in a group chat tells everyone
+in that chat which devices belong to it.
 
 For sensitivity beyond what this provides — e.g. a workspace whose *existence* must remain unknown to non-members — the answer is don't share its URI in any context that reaches non-members. The URI scheme can't defend against URLs being copied into public places by their holders; only against information being readable in URLs that legitimately reach the wrong audience.
 
