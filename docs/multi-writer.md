@@ -85,9 +85,9 @@ makes sense.
 
 Ties break on the author's clock. So a device whose clock is five minutes fast
 wins every collision it takes part in, whoever actually edited last, and
-nothing in the protocol notices. This is not hypothetical: two machines in this
-project were found 4–5 minutes apart on 17 Sep 2026, one of them simply not
-synchronised, and neither showed any sign of it.
+nothing in the protocol notices. A clock is not a fact about the world: it is a
+number a device reports about itself, and nothing else in this design trusts
+one of those.
 
 Three ways to stop it, and the first two are cheap:
 
