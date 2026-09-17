@@ -322,7 +322,7 @@ workspace://v1/z6Mk…#invite=<code>
 ### No names in a link
 
 A link never carries a name — not the workspace's, not a heading's, whether in
-the path, the query or the fragment (Leslie, 16 Sep 2026). A name in a link is
+the path, the query or the fragment (decided 16 Sep 2026). A name in a link is
 text written by whoever wrote the link, so an app that showed it would be
 repeating a stranger's claim about which workspace this is, and a link would
 leak the name to every channel it passes through.

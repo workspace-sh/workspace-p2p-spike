@@ -1,8 +1,8 @@
 # Joining by link
 
-**Status:** Leslie decided the join flow on 15 Sep 2026. Anything marked
-**default, pending Leslie** is built that way until Leslie says otherwise;
-anything under [Proposals](#proposals-not-decided) is not built. Nothing here is
+**Status:** the join flow was decided on 15 Sep 2026. Anything marked
+**default, pending a decision** is built that way until it is settled; anything
+under [Proposals](#proposals-not-decided) is not built. Nothing here is
 implemented except where it says so.
 
 How a device that has been shared a workspace gets from "someone sent me
@@ -101,8 +101,8 @@ exists for it (Decide 2).
 
 ## How a person joins (decided 15 Sep 2026)
 
-Leslie approved this flow on 15 Sep 2026. It replaces copying a device ID
-to the admin as the normal way in. The Device ID dialog stays as an advanced
+Decided 15 Sep 2026. It replaces copying a device ID to the admin as the
+normal way in. The Device ID dialog stays as an advanced
 option. One link for everyone, and grants on the DHT (Decide 2), remain the
 mechanism underneath: an invite or a request ends in exactly the grant, gate
 and welcome that already work.
@@ -127,7 +127,7 @@ workspace://v1/<id>#invite=<code>    the same link, plus a bearer invite
 - **Stripping the fragment** leaves the plain link.
 - **Out of transit:** a fragment isn't sent to any server a URL passes through.
 - **One parser:** links are parsed in one place, so the pairing survives a change to the part before the fragment (spike #59, z-base-32 ids in the host position).
-- **The code** (default, pending Leslie): a `blind-pairing` invite in z-base-32, the encoding Holepunch uses for keys.
+- **The code** (default, pending a decision): a `blind-pairing` invite in z-base-32, the encoding Holepunch uses for keys.
   - It leaves out the invite's discovery key, because the id already gives it: `crypto.discoveryKey(root key)`.
   - What's left is a version, flags, the 32-byte seed and the expiry: 38 bytes, 61 characters.
   - A whole invite link is about 130 characters.
@@ -142,7 +142,7 @@ workspace://v1/<id>#invite=<code>    the same link, plus a bearer invite
 
 ### Decided defaults
 
-| Question | Decision (Leslie, 15 Sep 2026) |
+| Question | Decision (15 Sep 2026) |
 |---|---|
 | Invites | Single-use, expiring after 7 days ("yes!"). A reusable invite when the admin asks for one |
 | Requests | Off until the admin turns them on, per workspace ("sure!") |
@@ -189,7 +189,7 @@ The admin's device keeps a record until its invite expires, so it can still answ
 | Opens | Sees |
 |---|---|
 | An invite link | "Joining…", then the workspace opens and syncs |
-| An invite link, admin's device offline | "Waiting for an admin to come online". This is a waiting state, not an error (default, pending Leslie). The claim stays open and retries while the app runs |
+| An invite link, admin's device offline | "Waiting for an admin to come online". This is a waiting state, not an error (default, pending a decision). The claim stays open and retries while the app runs |
 | An expired, used or revoked invite | The refusal above |
 | A workspace link, with a grant, no member online | "Waiting for someone in the workspace to come online", until a member comes online or the person cancels |
 | A workspace link or folder, as a member | It opens |
@@ -240,7 +240,7 @@ A request grants nothing until Accept.
 
 ### Proposals, not decided
 
-These wait for Leslie and aren't built.
+These are not decided, and aren't built.
 
 | Proposal | What it adds | Recommended |
 |---|---|---|
@@ -454,7 +454,7 @@ Autobase's settled order:
 - **The review decision is an entry**, appended by someone holding the capability to
   make it, so every device computes the same document.
 - **While held:** hidden from the document and listed for admins to review; "keep"
-  is an admin entry that applies it. Decided (Leslie, 14 Sep 2026) as the simplest
+  is an admin entry that applies it. Decided (14 Sep 2026) as the simplest
   to build. Showing held entries with a marker until reverted is in the backlog
   (#54).
 - **"Concurrent" is decided by Autobase's signed order, not the writer's claim.** A
@@ -526,7 +526,7 @@ Autobase's settled order:
    - the requests flag in the grant index;
    - the admin's inbox with Accept and Decline;
    - a smoke where a request is accepted after comparing codes.
-9. Invite links (workspace#492), once Leslie approves `blind-pairing`:
+9. Invite links (workspace#492), once `blind-pairing` is approved as a dependency:
    - the invite store on the admin's device;
    - the claim and its refusals;
    - a smoke where a device joins from an invite link alone.
