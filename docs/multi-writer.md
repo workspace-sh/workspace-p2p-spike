@@ -25,6 +25,20 @@ So the one thing that decides who may write is the one thing that cannot be
 shared: a Hypercore's secret key. Everything else — the gate, the UCAN, the
 apps' read-only banners — is a friendlier restatement of that fact.
 
+**Writability belongs to a store, not to a device.** Seen on the rig on
+17 Sep 2026: the same device, with the same identity and holding the
+workspace's root key, opened a workspace it had created minutes earlier and
+the app correctly said "Read-only — this workspace was shared with this device
+to read". Nothing was wrong. The logs had been created in a different store on
+that same machine, and writability follows the store that holds the log's
+secret key.
+
+So "can this device write?" already has three different answers — it holds the
+root key, it holds the log's secret key, it passed the gate — and only the
+middle one decides. A person cannot be expected to hold that distinction, and
+an app cannot explain it. Slice 2 below, where every device writes its own log,
+is what collapses the three into one.
+
 ## Forks: what cannot happen, and what can
 
 **A log cannot fork.** A Hypercore has exactly one writer by construction, and
