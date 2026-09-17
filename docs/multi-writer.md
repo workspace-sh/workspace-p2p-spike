@@ -1,9 +1,9 @@
 # Two people writing into one workspace
 
 **Status:** plan, 17 Sep 2026. The merge behaviour was decided in
-[ADR 0002](./adr/0002-autobase-merge-strategy.md) and Leslie confirmed it
-stands; the foundation under it is decided here. Nothing is implemented yet:
-today a workspace has one writer, the device that created it.
+[ADR 0002](./adr/0002-autobase-merge-strategy.md) and still stands; the
+foundation under it is decided here. Nothing is implemented yet: today a
+workspace has one writer, the device that created it.
 
 ADR 0002's merge decision is kept whole. What this plan changes is the layer
 beneath it — the ADR said "over Autobase", and three of its assumptions have
@@ -25,13 +25,12 @@ So the one thing that decides who may write is the one thing that cannot be
 shared: a Hypercore's secret key. Everything else — the gate, the UCAN, the
 apps' read-only banners — is a friendlier restatement of that fact.
 
-**Writability belongs to a store, not to a device.** Seen on the rig on
-17 Sep 2026: the same device, with the same identity and holding the
-workspace's root key, opened a workspace it had created minutes earlier and
-the app correctly said "Read-only — this workspace was shared with this device
-to read". Nothing was wrong. The logs had been created in a different store on
-that same machine, and writability follows the store that holds the log's
-secret key.
+**Writability belongs to a store, not to a device.** Observed 17 Sep 2026: one
+device, with one identity and holding the workspace's root key, opened a
+workspace it had created minutes earlier and was correctly told "Read-only —
+this workspace was shared with this device to read". Nothing was wrong. The
+logs had been created in a different store on the same machine, and writability
+follows the store that holds the log's secret key.
 
 So "can this device write?" already has three different answers — it holds the
 root key, it holds the log's secret key, it passed the gate — and only the
@@ -66,9 +65,9 @@ document now says. Whatever is chosen below:
 
 ## The merge is already decided
 
-[ADR 0002](./adr/0002-autobase-merge-strategy.md) settled it, and Leslie
-confirmed on 16 Sep 2026 that it stands. **Last-writer-wins per entity, where
-the entity is what each format calls a thing:**
+[ADR 0002](./adr/0002-autobase-merge-strategy.md) settled it, and it was
+reaffirmed on 16 Sep 2026. **Last-writer-wins per entity, where the entity is
+what each format calls a thing:**
 
 | Format | The unit that wins or loses | What that means for two people |
 |---|---|---|
@@ -200,7 +199,7 @@ What isn't:
   author. Identity lives in the log, never in the file; a save becomes one
   change set of block operations; position merges separately from content; and
   an editor that normalises markdown is the trap that would otherwise
-  overwrite a colleague's work. Four questions in it are Leslie's.
+  overwrite a colleague's work. Four questions in it are still open.
 - **Where the writer record lives** — the DHT, like grant records; the
   key-delivery log, which is the offline carrier; or both. Small, once slice 1
   starts.

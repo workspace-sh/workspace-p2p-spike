@@ -5,8 +5,8 @@
 two people editing different paragraphs of one document both keep their work
 only if every device agrees which paragraph is which. Nothing here is built.
 
-Written with the prose model's author (the Secondary rig), whose passes,
-granularity and the normalisation trap in § The trap are theirs.
+Shaped by the design of the TypeScript prose model, which supplies the diff
+passes, the granularity table and the normalisation trap in § The trap.
 
 ---
 
@@ -104,8 +104,8 @@ edited concurrently with its deletion for the same reason. "Concurrent" here is
 a fact from the version vector, not a guess about clocks: an update that had
 already seen the delete is an edit to a deleted block and does not resurrect it.
 
-**This needs Leslie's word**, because it is behaviour a person feels: a
-paragraph they deleted can come back.
+**This is not settled**, because it is behaviour a person feels: a paragraph
+they deleted can come back.
 
 ## A save is one entry, not one per block
 
@@ -152,7 +152,7 @@ log keeps tombstones, and they accumulate. `adr/0003-store-dual-form.md`
 already records that compaction is unsolved; this makes it slightly more
 pressing, not differently so.
 
-## Open, for Leslie
+## Open questions
 
 1. **The similarity threshold** in pass 4 — how different two paragraphs can be
    before "edited" becomes "replaced".
@@ -161,4 +161,4 @@ pressing, not differently so.
 3. **List items nested under other items** — their own blocks in v1, or part of
    the parent's?
 4. **Resurrection** (§ Deleting something someone else is editing) — is a
-   deleted paragraph coming back the behaviour Leslie wants?
+   deleted paragraph coming back the right behaviour?
