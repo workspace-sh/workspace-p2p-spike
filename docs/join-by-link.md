@@ -72,32 +72,25 @@ Two notes for the folder:
 - **Step 3 by folder.** The admin exports an *invitation*: a folder holding
   only `.workspace/manifest.json`, `attestation.json` and the recipient's
   envelope (workspace#456). B opens it with Open Workspace…, and steps 4–8 run.
-  Proven through the apps' own child processes over a private DHT
-  (`yarn p2p:smoke:two-device`) and with the Linux app as the recipient.
+- **Step 3 by link.** A device holding only `workspace://v1/<id>` finds its own
+  grant as a record on the DHT, presents it, and is welcomed — the folder is no
+  longer needed to carry an envelope (Decide 2, workspace#507).
+  `yarn p2p:smoke:two-device` proves both routes through the apps' own child
+  processes over a private DHT.
 - **Step 6** verifies every link's signature, the chain to the root, and that
-  the capability names this workspace (workspace#430, #448).
+  the capability names this workspace (workspace#430, #448). It also refuses a
+  revoked device (workspace#433).
+- **Asking to join.** A device with no grant opens a request, both screens show
+  the same six digits, and an admin's Accept seals the envelope on the same
+  channel (workspace#507, #510, #535). `yarn p2p:smoke:request-to-join`.
 - **One identifier everywhere.** The manifest, the UCAN resource and a link all
   name the workspace by its root DID's multibase key, and the attestation signs
   the topic and the log keys (Decide 1, workspace#466).
 
-A link that replaces the folder is the gap.
-
-## Why a link does not work yet
-
-1. **The gate is first.** A member exchanges nothing with a connection until it
-   presents a valid UCAN. A device holding only a link has no UCAN yet: its UCAN
-   is inside the envelope it is trying to fetch. `uri-scheme.md` § Resolution
-   flow says "fetch `manifest.json` + `attestation.json` from any peer" without
-   saying how, before or around the gate.
-2. **Nothing handles `workspace://`** on any platform yet (workspace#236).
-
-Whatever a link carries, **the admin's device still needs B's device key before B
-can read**, because K0 is sealed to it. An invite claim or an access request
-carries the key inside the app; Share with Device ID… carries it by hand. The
-link is the same for everyone; what changes per device is whether a grant
-exists for it (Decide 2).
-
----
+**Not built yet:** invite links (workspace#492 — the secret, the `claim`
+message and the invite store are merged; the wiring is not), the requests flag
+in the grant index, and `workspace://` handling by any platform
+(workspace#236).
 
 ## How a person joins (decided 15 Sep 2026)
 
@@ -127,10 +120,14 @@ workspace://v1/<id>#invite=<code>    the same link, plus a bearer invite
 - **Stripping the fragment** leaves the plain link.
 - **Out of transit:** a fragment isn't sent to any server a URL passes through.
 - **One parser:** links are parsed in one place, so the pairing survives a change to the part before the fragment (spike #59, z-base-32 ids in the host position).
-- **The code** (default, pending a decision): a `blind-pairing` invite in z-base-32, the encoding Holepunch uses for keys.
-  - It leaves out the invite's discovery key, because the id already gives it: `crypto.discoveryKey(root key)`.
-  - What's left is a version, flags, the 32-byte seed and the expiry: 38 bytes, 61 characters.
-  - A whole invite link is about 130 characters.
+- **The code** (decided 19 Sep 2026): a random 32-byte secret in z-base-32, the
+  alphabet Holepunch writes keys in — it drops the characters an eye slips on
+  (`0`/`O`, `1`/`l`/`I`), which matters for something a person may read aloud or
+  retype.
+  - 32 bytes is 52 characters, and a whole invite link about 120.
+  - The encoding is strict about canonical spelling: a trailing group whose
+    padding bits are not zero is refused, so one invite cannot be written
+    several ways when only one of them was ever hashed.
 
 ### Share options
 
@@ -152,35 +149,74 @@ Parked: a folder carrying an invite ("park this thinking").
 
 ### Claiming an invite
 
-Holepunch's `blind-pairing` (and `blind-pairing-core`) carries the claim, as it
-does for Keet and Pear rooms.
+An invite is carried on the **same request channel an access request uses**,
+not on a pairing library of its own (decided 19 Sep 2026; the earlier draft of
+this section specified Holepunch's `blind-pairing`).
 
-1. **The admin's device creates the invite.** `createInvite(rootPublicKey, { expires })` gives `{ invite, publicKey, discoveryKey, id }`.
-   - The device keeps `{ id, publicKey, expires, usesLeft }` in its own data directory, never in the folder.
-   - The link carries `invite`.
-2. **While the admin's device is online** and has unexpired invites, it listens with `addMember({ discoveryKey, onadd })`.
-3. **The joiner's app claims.** From the fragment it runs `addCandidate({ invite, userData })`. `userData` is the joiner's device public key and a display name. The request is signed with the invite's key pair and encrypted to it.
-4. **In `onadd`, the admin's device:**
-   - calls `candidate.open(publicKey)`, which proves the claimant holds the invite seed;
-   - checks the invite is known, unexpired, has uses left, and isn't revoked;
-   - decrements the uses;
-   - calls `invite(deviceDid)`, sealing the envelope and publishing the grant;
-   - replies with `candidate.confirm({ key: rootPublicKey, additional: { data: envelope } })`.
-5. **The joiner** checks that `key` matches the link's root, validates the envelope's UCAN against the root DID, and unwraps K0. It then joins as a device with a grant: topic, gate, welcome.
+The reasoning, because the earlier choice was not a bad one. `blind-pairing`
+would have brought a tested implementation and one real property this does not
+have: the two devices meet at an address derived from the invite secret, so an
+observer cannot tell which workspace is being joined. But that privacy win
+covers only invite links — an access request still meets on a topic derived
+from the workspace's own root key, so adopting it here would have fixed one of
+two doors while adding a second way to be admitted and a dependency to carry.
+Blinded discovery is worth having; it is worth having for *both* entry points,
+as its own decision, and the rendezvous below is deliberately the only layer it
+would replace.
 
-Without the invite seed nothing happens: `candidate.open` fails, so no envelope is sealed. A leaked invite admits whoever claims it first, once, within 7 days. The admin can revoke it before then. An envelope sealed to a key the claimant doesn't hold is useless to them.
+1. **The admin's device mints the invite.** A random 32-byte secret. The device
+   stores SHA-256(secret) with `{ expires, usesLeft, revoked }` in its own data
+   directory, never in the folder — the folder is the thing people copy.
+   - It never stores the secret, so a store that leaks cannot mint a working
+     link, and Copy Invite Link always makes a new invite.
+   - The link carries the secret as z-base-32, 52 characters.
+2. **The admin's device answers claims** while it holds any invite that is
+   unexpired, unspent and unrevoked — independently of whether *access
+   requests* are on. They are two doors, and a person who has handed out a link
+   has not thereby invited strangers to ask.
+3. **The joiner claims.** On `workspace/request@1`, it sends
+   `{ name, secret }` — a `claim` message beside `ask`. The Noise connection
+   has already proved the joiner's device key, which is what the envelope is
+   sealed to.
+4. **The admin's device** looks the secret's hash up in its store, checks the
+   invite is unrevoked, unexpired and has uses left, spends a use, runs
+   `invite(deviceDid)`, and sends the sealed envelope as the same `grant`
+   message an accepted request uses.
+5. **The joiner** validates the envelope's UCAN against the link's root and
+   unwraps K0, then joins as a device with a grant: topic, gate, welcome —
+   the identical tail.
 
-**Refusals.** The admin's device answers a claim it won't admit with `candidate.deny({ status })`. `blind-pairing` has three statuses, and each gets its own message:
+No code is compared, and that is the difference between being invited and
+asking: possession of the secret is the whole claim. Without it nothing
+happens, because nothing in the store matches. A leaked invite admits whoever
+claims it first, once, within 7 days.
 
-| Invite | Status | Joiner sees |
-|---|---|---|
-| Expired | 3, and known from the code's expiry before anything is sent | "This invite has expired." |
-| Used | 2 | "This invite has already been used." |
-| Revoked | 1, `blind-pairing`'s "rejected"; an admin's device sends it only for a revoked invite | "This invite was revoked." |
+**Single use earns its default.** A bearer link has no human checkpoint the way
+an access request does, so the limits *are* the blast radius. Single use also
+means a link claimed by the wrong person makes the intended recipient's claim
+fail — the mistake announces itself instead of passing unnoticed.
+
+**Refusals.** Unlike a declined access request — which is told nothing at all,
+deliberately — a refused claim says which kind of no it is. The holder is
+usually the person who was meant to have it, and the difference between asking
+for another link and deciding the app is broken is worth more than what it
+concedes: that a secret they already hold was once real.
+
+| Invite | Joiner sees |
+|---|---|
+| Not in the store | "This invite has expired." — an invite forgotten after lapsing and one that never existed are indistinguishable, and read the same |
+| Expired | "This invite has expired." |
+| Used | "This invite has already been used." |
+| Revoked | "This invite was revoked." |
 
 Each message ends "Ask for a new one."
 
-The admin's device keeps a record until its invite expires, so it can still answer "used" or "revoked". It never keeps the seed, so an outstanding invite can't be copied again; Copy Invite Link makes a new one.
+**Revoked beats expired beats spent**, so an admin who took an invite back is
+told that, whatever else has since become true of it.
+
+A spent or revoked record is **kept until it expires**, so the device can still
+say which no it is; dropping it the moment it was spent would answer "expired"
+to the person who just used it. Only expiry makes a record worthless.
 
 **Only the creating device admits.** The invite store is on the device that made the invite, so that device has to be online for the claim to complete, even if the workspace has other admin devices.
 
@@ -202,7 +238,9 @@ The admin's device keeps a record until its invite expires, so it can still answ
 
 ### Requesting access
 
-`blind-pairing` needs an invite, so a request without one has its own channel.
+A request has no invite to present, so it opens with a conversation instead of
+a secret. Both entry points share this one channel: what the joiner sends —
+`ask` or `claim` — is what decides which it is.
 
 1. **Where requests go.** An admin device with requests turned on joins a request topic, SHA-256(`"workspace requests\0"` ‖ root key). Members who aren't admins never join it, so they never answer strangers.
 2. **The request.** On a Protomux channel `workspace/request@1`, the joiner's device sends `{ name, commitment }` over the Noise connection, which proves the joiner's device key.
@@ -211,6 +249,12 @@ The admin's device keeps a record until its invite expires, so it can still answ
 3. **The exchange.** The admin's device replies `{ nA }`, a random 32-byte nonce. The joiner reveals `nR`, and the admin checks it against the commitment.
 4. **The code.** Both devices show the same code: the first 20 bits of SHA-256(`"workspace join code\0"` ‖ workspace id ‖ joiner key ‖ admin key ‖ `nR` ‖ `nA`), as 6 digits.
 5. **Accept.** It runs `invite(deviceDid)` for the joiner's key and sends the sealed envelope on the same channel. Ignore or Decline sends nothing.
+   - **Let the grant reach the wire before closing.** Sending and then
+     destroying the connection in the same tick loses the write — the one
+     message on this channel that must arrive. Accept waits briefly before
+     ending the request; Decline and expiry send nothing and need no wait.
+     Every test against a fake channel passed with this wrong; only a live DHT
+     showed it (workspace#535).
 
 **Why commit-then-reveal.** A 6-digit code is 20 bits. Without the commitment, someone between the two devices could try keys until the codes on both sides match, about a million tries, which takes seconds. With it, each side's nonce is fixed before the other's is seen, so there is nothing to grind. This is how Bluetooth numeric comparison and ZRTP make short codes safe.
 
@@ -229,9 +273,26 @@ A request grants nothing until Accept.
 3. **Pairing.** A runtime pairs `workspace/request@1` only while its workspace has requests on. Otherwise Protomux refuses the channel and the auth timeout drops the connection, as it does today.
 4. **An open request.** When a peer opens the request channel before presenting a proof, its auth timeout is replaced by the request's 10-minute expiry, and the request goes to the inbox under its limits. The connection is never admitted: nothing replicates and it isn't counted as a peer. Accept sends the envelope on the channel; Accept, Decline and expiry each close the connection.
 5. **After Accept.** The asking device connects again on the workspace topic as a member, presenting the UCAN from its envelope.
+   - **The second connection is scoped to the workspace**, exactly as an
+     ordinary join is. A device sharing one connection across several
+     workspaces names each one's membership exchange on its own Protomux
+     channel; a runtime that omits the scope opens the unnamed channel while
+     the admin, which has one, opens the named one, and the two never complete
+     an exchange over the connection they do make. The symptom is a timeout
+     that says nobody is online while both devices are online and reachable
+     (workspace#536).
+   - It also **keeps looking** rather than resting on one DHT lookup, for the
+     same reason an ordinary join does (workspace#505).
 6. **Trust.** The asking device doesn't need to verify who answered. The compared code binds both device keys, and it accepts an envelope only if the UCAN inside validates to the link's root.
 
 **Requests on or off.** With no admin online, "requests off" and "admin offline" look the same: nobody is on the request topic. So the grant index, which the root signs and a joiner already reads to find its grant, carries a flag saying whether requests are on. A joiner with no grant reads the flag and shows **Ask to Join** only when it's set.
+
+> **Specified, not built.** The grant index carries no such flag today, so the
+> two cases are still conflated: an ask that finds nobody fails with one
+> message covering "requests are off", "no admin is online" and "the admin did
+> not answer in time". That message is deliberately vague rather than wrong,
+> but it is the wrong shape — it cannot tell a person whether waiting would
+> help. The flag is what fixes it.
 
 ### Constraints
 
@@ -526,9 +587,10 @@ Autobase's settled order:
    - the requests flag in the grant index;
    - the admin's inbox with Accept and Decline;
    - a smoke where a request is accepted after comparing codes.
-9. Invite links (workspace#492), once `blind-pairing` is approved as a dependency:
-   - the invite store on the admin's device;
-   - the claim and its refusals;
+9. Invite links (workspace#492), on the request channel step 8 builds:
+   - the invite secret and the `claim` message (workspace#541, merged);
+   - the invite store on the admin's device (workspace#544, merged);
+   - wiring the claim to the inbox, and its refusals;
    - a smoke where a device joins from an invite link alone.
 10. Share options in each app (workspace#494–#496):
     - Copy Invite Link (default), Copy Workspace Link and Export Folder…;
