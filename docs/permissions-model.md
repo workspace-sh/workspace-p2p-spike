@@ -312,10 +312,11 @@ from encryption-layer access.
   - the granted capability is a `workspace/` capability on this
     workspace's own resource URI.
 
-  It also takes an `isRevoked` check for revoked DIDs. A sniffed UCAN
-  replayed on another peer's connection fails the audience bind; a
-  delegation that names the root as issuer but was signed by another key
-  fails the signature check.
+  It also takes an `isRevoked` check, which a workspace answers from the
+  revocation blocks it has read off the key delivery log (below). A
+  sniffed UCAN replayed on another peer's connection fails the audience
+  bind; a delegation that names the root as issuer but was signed by
+  another key fails the signature check.
 
 The remaining piece is **topic rotation** (point 2) — rotating the
 discovery topic alongside `K0_org` on departure so a revoked peer can't
@@ -323,30 +324,64 @@ even rediscover the swarm. Tracked with the broader rotation work.
 
 ### Revocation notice block on the key delivery log
 
-When a peer is revoked, an admin appends a signed **revocation block**
+When a peer is revoked, the root appends a signed **revocation block**
 to the key delivery log:
 
 ```json
 {
-  "kind": "revocation",
+  "kind": "workspace/revocation@1",
   "subject": "did:key:zMarco…",
-  "revokedAt": 1717200000,
-  "issuer": "did:key:zLeslie…",
-  "signature": "<base64-ed25519-signature>"
+  "at": 1717200000,
+  "signature": "<hex-ed25519-signature>"
 }
 ```
 
-Signed by the issuer (an admin with revoke capability over the
-subject's chain). Replicated to all peers. The subject's app sees
-the block on next sync, reads the workspace's
-[`.workspace/policy.json`](./workspace-format.md), and runs whatever
-cleanup the policy declares.
+The kind is versioned to match the `workspace/key-delivery@1` records
+beside it, so one log carries both and a scanner takes only what it
+recognises. A peer on an older build meets a revocation block, does not
+know the kind, and skips it — it goes on admitting the device until the
+delegation expires, rather than failing.
 
-This is **cooperative-client behaviour** — a hint to well-behaved
-apps, not a cryptographic enforcement. A modified client can ignore
-the revocation notice. The cryptographic levers (key rotation,
-topic-layer rejection) carry the actual security load. See
-[`threat-model.md`](./threat-model.md) for the contract.
+**What is signed** is `"workspace revocation\0" ‖ root key ‖ subject
+key ‖ at`. The root key is in it so a revocation cannot be lifted out of
+one workspace and replayed into another holding the same device; `at`
+is in it so the date cannot be edited afterwards.
+
+**The root signs, and there is no `issuer` field.** v1 has one authority
+— the root — so naming an issuer would imply a delegated revoke
+capability that does not exist. The field returns when sub-delegation
+does, along with the question of whose chains an admin may cut.
+
+#### This is enforced, not advisory
+
+The block is checked at the membership gate: `verifyMembership` takes an
+`isRevoked` predicate, and a workspace answers it from the revocations
+it has read. A revoked device is refused when it presents its proof, so
+a modified client gains nothing by ignoring its own revocation — the
+refusal happens on the other device.
+
+What remains cooperative is only the local cleanup a revoked peer's own
+app does on seeing the block.
+
+#### What it does not do
+
+Forward-only is not the whole of it, and the rest is easy to miss:
+
+- **It takes effect at the next connection.** A connection already open
+  is not closed, so a revoked device that is mid-session keeps
+  replicating until that connection ends for some other reason.
+- **It is not simultaneous.** Each member enforces a revocation once the
+  block reaches *its* replica of the log. A member that admitted the
+  revoked device before reading it goes on serving that device — so a
+  revocation propagates at the speed of the log, not of the click.
+- **It recalls nothing.** Whatever already replicated is on that device.
+- **It does not re-key.** Writes made before a rotation stay readable to
+  anyone already holding `K0_org`, which is why the two levers in this
+  section are two.
+
+A gate refusal is therefore "this device gets nothing further from me,
+from now on", and an interface that says "removed" while any of the
+above is true is claiming more than happened.
 
 The revocation block being part of the replicated log means a
 revoked peer cannot escape it by deleting their local copy — next
