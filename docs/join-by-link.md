@@ -87,9 +87,18 @@ Two notes for the folder:
   name the workspace by its root DID's multibase key, and the attestation signs
   the topic and the log keys (Decide 1, workspace#466).
 
-**Not built yet:** invite links (workspace#492 — the secret, the `claim`
-message and the invite store are merged; the wiring is not), the requests flag
-in the grant index, and `workspace://` handling by any platform
+- **Joining from an invite link.** A device holding
+  `workspace://v1/<id>#invite=<code>` presents the secret on the request
+  channel and is admitted with no code compared and nobody answering; a second
+  claim of a single-use invite, a revoked one, and one nobody minted are each
+  refused with their own reason (workspace#492).
+  `yarn p2p:smoke:invite-link`.
+- **Revoking a member**, and the gate refusing them at their next connection
+  (workspace#433). `yarn p2p:smoke:revocation`.
+- **All of it over IPC**, so the apps can reach it rather than only the SDK.
+
+**Not built yet:** the requests flag in the grant index, the share options in
+each app (workspace#494–#496), and `workspace://` handling by any platform
 (workspace#236).
 
 ## How a person joins (decided 15 Sep 2026)
@@ -213,6 +222,10 @@ Each message ends "Ask for a new one."
 
 **Revoked beats expired beats spent**, so an admin who took an invite back is
 told that, whatever else has since become true of it.
+
+Every row of that table is covered by `yarn p2p:smoke:invite-link`, against a
+live DHT rather than a fake channel — a refusal that is computed correctly and
+never reaches the wire looks exactly like one that works.
 
 A spent or revoked record is **kept until it expires**, so the device can still
 say which no it is; dropping it the moment it was spent would answer "expired"
