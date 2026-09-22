@@ -223,6 +223,25 @@ Each message ends "Ask for a new one."
 **Revoked beats expired beats spent**, so an admin who took an invite back is
 told that, whatever else has since become true of it.
 
+**Why an invite nobody ever minted reads "expired".** It looks like a bug —
+someone who mistyped a link is told it lapsed — and it is deliberate, for two
+reasons of different weight:
+
+- The main one is correctness. A spent or revoked invite is kept only until it
+  expires, then forgotten. After that, an invite that was real and lapsed is
+  indistinguishable from one that never existed, and the true thing to tell
+  its holder is that it expired. A separate "no such invite" message would be
+  shown to exactly the people it is wrong for.
+- The lesser one is that an invented string gets no confirmation it was never
+  real. That is worth little on its own — a secret is 32 random bytes, and
+  nobody finds a live one by guessing — but it costs nothing, where the
+  opposite would make every refusal a small oracle.
+
+What a refusal *does* concede is stated plainly elsewhere and is the point:
+"used" and "revoked" confirm that a secret the holder already has was once
+real. That is the price of telling the intended recipient something useful,
+and it is only ever paid to someone who holds the secret.
+
 Every row of that table is covered by `yarn p2p:smoke:invite-link`, against a
 live DHT rather than a fake channel — a refusal that is computed correctly and
 never reaches the wire looks exactly like one that works.
