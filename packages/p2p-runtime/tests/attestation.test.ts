@@ -76,12 +76,14 @@ test('verify rejects signature of wrong length', () => {
   assert.throws(() => verify(enc.encode('x'), new Uint8Array(63), kp.publicKey), /64 bytes/);
 });
 
+const TOPIC = 'abababababababababababababababababababababababababababababababab';
+
 // ---------------------------------------------------------------------------
 // Canonical payload determinism
 // ---------------------------------------------------------------------------
 
 test('canonical payload: same input always produces same bytes', () => {
-  const p: AttestationPayload = { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 };
+  const p: AttestationPayload = { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC };
   const a = buildAttestationPayload(p);
   const b = buildAttestationPayload(p);
   assert.deepEqual(Array.from(a), Array.from(b));
@@ -92,8 +94,10 @@ test('canonical payload: field order in input does not matter', () => {
     workspaceId: 'wid-1',
     createdAt: 1717200000,
     formatVersion: 1,
+    topicId: TOPIC,
   });
   const b = buildAttestationPayload({
+    topicId: TOPIC,
     formatVersion: 1,
     workspaceId: 'wid-1',
     createdAt: 1717200000,
@@ -106,10 +110,45 @@ test('canonical payload: keys are alphabetically ordered in the output', () => {
     workspaceId: 'wid',
     createdAt: 100,
     formatVersion: 1,
+    topicId: TOPIC,
   });
   const str = new TextDecoder().decode(bytes);
   // Expected exact form (no whitespace, sorted keys).
-  assert.equal(str, '{"createdAt":100,"formatVersion":1,"workspaceId":"wid"}');
+  assert.equal(str, `{"createdAt":100,"formatVersion":1,"topicId":"${TOPIC}","workspaceId":"wid"}`);
+});
+
+test('canonical payload: logs are signed with their keys in alphabetical order', () => {
+  const bytes = buildAttestationPayload({
+    workspaceId: 'wid',
+    createdAt: 100,
+    formatVersion: 1,
+    topicId: TOPIC,
+    logs: { keyDelivery: 'k', data: 'd', blobs: 'b' },
+  });
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    `{"createdAt":100,"formatVersion":1,"logs":{"blobs":"b","data":"d","keyDelivery":"k"},"topicId":"${TOPIC}","workspaceId":"wid"}`,
+  );
+});
+
+test('workspace attestation: tampered topicId rejects', () => {
+  const root = keypair();
+  const att = signWorkspaceAttestation(
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
+    root.secretKey,
+  );
+  assert.equal(verifyWorkspaceAttestation({ ...att, payload: { ...att.payload, topicId: '00'.repeat(32) } }), false);
+});
+
+test('workspace attestation: a tampered log key rejects', () => {
+  const root = keypair();
+  const att = signWorkspaceAttestation(
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC, logs: { data: 'd', keyDelivery: 'k' } },
+    root.secretKey,
+  );
+  assert.equal(verifyWorkspaceAttestation(att), true);
+  const tampered = { ...att, payload: { ...att.payload, logs: { data: 'other', keyDelivery: 'k' } } };
+  assert.equal(verifyWorkspaceAttestation(tampered), false);
 });
 
 test('canonical payload: createdAt is floored to whole seconds', () => {
@@ -117,6 +156,7 @@ test('canonical payload: createdAt is floored to whole seconds', () => {
     workspaceId: 'wid',
     createdAt: 100.9,
     formatVersion: 1,
+    topicId: TOPIC,
   });
   const str = new TextDecoder().decode(bytes);
   assert.match(str, /"createdAt":100,/);
@@ -129,7 +169,7 @@ test('canonical payload: createdAt is floored to whole seconds', () => {
 test('workspace attestation: sign + verify round-trip', () => {
   const root = keypair();
   const att = signWorkspaceAttestation(
-    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 },
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
     root.secretKey,
   );
   assert.equal(verifyWorkspaceAttestation(att), true);
@@ -141,7 +181,7 @@ test('workspace attestation: rootDid matches what didFromSeed would produce', ()
   const seed = root.secretKey.subarray(0, 32);
   const expectedDid = didFromSeed(seed);
   const att = signWorkspaceAttestation(
-    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 },
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
     root.secretKey,
   );
   assert.equal(att.rootDid, expectedDid);
@@ -150,7 +190,7 @@ test('workspace attestation: rootDid matches what didFromSeed would produce', ()
 test('workspace attestation: tampered workspaceId rejects', () => {
   const root = keypair();
   const att = signWorkspaceAttestation(
-    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 },
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
     root.secretKey,
   );
   const tampered = {
@@ -163,7 +203,7 @@ test('workspace attestation: tampered workspaceId rejects', () => {
 test('workspace attestation: tampered createdAt rejects', () => {
   const root = keypair();
   const att = signWorkspaceAttestation(
-    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 },
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
     root.secretKey,
   );
   const tampered = { ...att, payload: { ...att.payload, createdAt: 9999999999 } };
@@ -173,7 +213,7 @@ test('workspace attestation: tampered createdAt rejects', () => {
 test('workspace attestation: tampered signature rejects', () => {
   const root = keypair();
   const att = signWorkspaceAttestation(
-    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 },
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
     root.secretKey,
   );
   const sig = new Uint8Array(att.signature);
@@ -186,7 +226,7 @@ test('workspace attestation: claiming a different rootDid rejects', () => {
   const imposter = keypair();
   const imposterDid = didFromSeed(imposter.secretKey.subarray(0, 32));
   const att = signWorkspaceAttestation(
-    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 },
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
     root.secretKey,
   );
   assert.equal(
@@ -198,7 +238,7 @@ test('workspace attestation: claiming a different rootDid rejects', () => {
 test('workspace attestation: tampered payloadBytes (mismatched against payload) rejects', () => {
   const root = keypair();
   const att = signWorkspaceAttestation(
-    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1 },
+    { workspaceId: 'wid-1', createdAt: 1717200000, formatVersion: 1, topicId: TOPIC },
     root.secretKey,
   );
   // Build a different payload's bytes and slip them in.
@@ -206,6 +246,7 @@ test('workspace attestation: tampered payloadBytes (mismatched against payload) 
     workspaceId: 'wid-other',
     createdAt: 1717200000,
     formatVersion: 1,
+    topicId: TOPIC,
   });
   assert.equal(
     verifyWorkspaceAttestation({ ...att, payloadBytes: otherBytes }),

@@ -20,6 +20,10 @@
 //
 // See docs/permissions-model.md ("The two carriers") for the design.
 
+// Bare provides no TextEncoder/TextDecoder globals, and this file runs inside
+// the Bare worklet on iOS/Android. b4a covers both hosts (#243).
+import b4a from 'b4a';
+
 import type { Log, Did } from '@workspace.sh/p2p-runtime';
 
 import {
@@ -42,9 +46,6 @@ interface DeliveryRecord {
   envelope: SerialisedEnvelope;
 }
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
 /**
  * Append a sealed envelope to the key delivery log. Returns the log's new
  * length. The envelope is produced exactly as a bundle envelope is — see
@@ -58,7 +59,7 @@ export async function publishDelivery(log: Log, envelope: Envelope): Promise<num
     kind: DELIVERY_KIND,
     envelope: serialiseEnvelope(envelope),
   };
-  return log.append(encoder.encode(JSON.stringify(record)));
+  return log.append(b4a.from(JSON.stringify(record)));
 }
 
 /** A delivery that was addressed to the scanning peer and validated. */
@@ -122,7 +123,7 @@ export async function scanDeliveries(
   for (let index = from; index < to; index++) {
     let record: DeliveryRecord;
     try {
-      const parsed = JSON.parse(decoder.decode(await log.get(index))) as Partial<DeliveryRecord>;
+      const parsed = JSON.parse(b4a.toString(await log.get(index), 'utf8')) as Partial<DeliveryRecord>;
       if (parsed.kind !== DELIVERY_KIND || !parsed.envelope) {
         continue; // not a key-delivery block (e.g. a future revocation block)
       }

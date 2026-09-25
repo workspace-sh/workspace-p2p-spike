@@ -35,7 +35,7 @@ Bonus: Hypercore's append events crossed the NSTask boundary unprompted. The "ze
 
 ### `@workspace.sh/ucan-boundary`
 
-UCAN delegation boundary module — every ucanto call confined to one file so a future library swap stays a small change. Surface: `issueDelegation`, `validateDelegation` (with the `canIssue` override for `workspace://` URIs), `toBytes` / `fromBytes` for transport, `WHOLE_SECOND_FLOOR` named constant for the expiry gotcha.
+UCAN delegation boundary module — every UCAN library call confined to one file, so a library swap stays a small change (it has already made one: UCAN 1.0 through `iso-ucan` replaced ucanto, ADR 0001). Surface: `issueDelegation`, `validateDelegation` (every chain link's signature, the chain to the root, a segment-bounded command and a resource policy), `toBytes` / `fromBytes` for transport, `WHOLE_SECOND_FLOOR` named constant for the expiry gotcha.
 
 ### `@workspace.sh/portable-bootstrap`
 
@@ -55,7 +55,7 @@ The surface the Workspace app is built against. One object composes everything: 
 
 ### DID identity
 
-`did:key:z6Mk…` derivation from Corestore's `primaryKey` is now **implemented** (`packages/p2p-runtime/src/did.ts`). The format matches what ucanto expects in delegation chains. One keypair, one identity, no translation layer.
+`did:key:z6Mk…` derivation from Corestore's `primaryKey` is now **implemented** (`packages/p2p-runtime/src/did.ts`). The format is the one UCAN delegation chains use. One keypair, one identity, no translation layer.
 
 ---
 
@@ -75,7 +75,7 @@ Nine design docs in `docs/`, all consistent and cross-referenced:
 | `risks.md` | Failure modes, mitigations, identity-fusion migration cost, successor-chain |
 | `ucan-prior-research.md` | UCAN library notes, gotchas, library comparison |
 
-Validated as workable; every cryptographic component is either in production today (Autobase, ucanto, Hypercore/Hyperswarm, sodium-universal) or has a well-trodden standards-based answer (MLS / RFC 9420 for enterprise scale). No research-grade cryptography required.
+Validated as workable; every cryptographic component is either in production today (Autobase, Hypercore/Hyperswarm, sodium-universal, and UCAN, whose 1.0 specification is final) or has a well-trodden standards-based answer (MLS / RFC 9420 for enterprise scale). No research-grade cryptography required.
 
 The consumer-facing view of the permissions model lives in [`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md).
 

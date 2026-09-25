@@ -343,7 +343,7 @@ Workspaces with strict privacy posture should use the `policy.json` workspace po
 When an app opens a `workspace://` URI:
 
 1. **Parse the URI** — extract the workspace pubkey from the path; parse the version; identify the resource type from the next path segment. If the fragment carries `invite`, claim it first ([`join-by-link.md`](./join-by-link.md) § Claiming an invite)
-2. **Derive the Hyperswarm topic** — SHA-256 of the pubkey bytes
+2. **Derive the Hyperswarm topic** — SHA-256 of the 32-byte public key (without the multicodec prefix), the value a new workspace records as `manifest.topicId`
 3. **Discover peers** — join the Hyperswarm topic via DHT; in parallel, try any `relays` query hints for faster cold-start
 4. **Fetch the workspace bootstrap** — `manifest.json` + `attestation.json` from any peer (~2 KB)
 5. **Verify the attestation** — the signature verifies against the URI's pubkey; reject if not

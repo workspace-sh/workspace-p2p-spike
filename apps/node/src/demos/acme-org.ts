@@ -34,6 +34,7 @@ import {
   consumeBundle,
   writeBundleFolder,
   readBundleFolder,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
 } from '@workspace.sh/portable-bootstrap';
 
@@ -167,13 +168,12 @@ async function main(): Promise<void> {
     crypto.getRandomValues(k0Org);
     log(`  K0_org generated: ${Buffer.from(k0Org).toString('hex').slice(0, 24)}…`);
 
-    // workspaceId == root pubkey, per the spec.
-    const workspaceId = aliceKp.publicKey.toString('hex');
+    // The workspace id is the root DID's multibase key, per the spec.
+    const workspaceId = workspaceIdForRoot(alice.did());
     const resource = `workspace://v1/${workspaceId}`;
     const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
 
     const bundle = await createBundle({
-      workspaceId,
       createdAt: Math.floor(Date.now() / 1000),
       root: alice,
       rootSecretKey: aliceKp.secretKey,

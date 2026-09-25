@@ -1,6 +1,32 @@
 # ADR 0001 — UCAN library: ucanto, not iso-ucan
 
-**Status:** Accepted · **Date:** 2026-06 · **Tracks:** [#19](https://github.com/workspace-sh/workspace-p2p-spike/issues/19)
+**Status:** Superseded (14 Sep 2026) by UCAN 1.0 through iso-ucan — see below · **Date:** 2026-06 · **Tracks:** [#19](https://github.com/workspace-sh/workspace-p2p-spike/issues/19)
+
+## Superseded: UCAN 1.0 through iso-ucan
+
+The monorepo's `@workspace.sh/ucan-boundary` issues and validates UCAN 1.0
+delegations with `iso-ucan` (workspace-sh/workspace#462), behind the same
+surface this ADR set up.
+
+- **Why now.** UCAN 1.0 (spec, delegation, invocation) is final as of July
+  2026; ucanto still targets 0.9.1 with no activity on its upgrade issue
+  (storacha/ucanto#345); `iso-ucan` implements the 1.0 shape and is maintained.
+  Evidence: [`../permissions-prior-art.md`](../permissions-prior-art.md) §4–5.
+- **Mapping.** A capability `{ can, with }` is `sub`: the workspace root DID,
+  `cmd: /<can>`, `pol: [["==", ".resource", with]]`. The `canIssue` override
+  this ADR describes is not needed: a 1.0 root delegation is self-issued by its
+  subject.
+- **Checked before adopting:** forged-signature delegations and invocations
+  refused, genuine ones accepted, another device's proof refused, expired proofs
+  refused, and our ed25519 seeds give the same `did:key`. One gap: iso-ucan 0.5
+  matches commands with a bare `startsWith`, so the boundary module checks the
+  segment boundary itself.
+- **Still open:** revocation (1.0.0-rc.1) is not in iso-ucan; Workspace
+  implements it (workspace-sh/workspace#433). The mobile Bare worklet needs
+  hashing and nonces from sodium (done in the boundary module) and may need a
+  `TextEncoder` shim (unverified).
+
+The ucanto decision below is kept as the record of why it was chosen then.
 
 ## Context
 
