@@ -11,6 +11,6 @@ ADR is just the decision.
 
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](./0001-ucan-library.md) | UCAN library: ucanto (not iso-ucan) | Accepted |
+| [0001](./0001-ucan-library.md) | UCAN library: ucanto (not iso-ucan) | Superseded: UCAN 1.0 through iso-ucan (#55) |
 | [0002](./0002-autobase-merge-strategy.md) | Multi-writer merge: per-format LWW over Autobase | Accepted (design) |
 | [0003](./0003-store-dual-form.md) | Store: RocksDB working copy + serialised transport copy in `.workspace/store/` | Accepted |
