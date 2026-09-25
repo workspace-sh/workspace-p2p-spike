@@ -13,12 +13,11 @@
 // Ed25519 ↔ curve25519 conversion is handled internally so callers pass
 // ed25519 keys (the form Hypercore + did:key already produce).
 
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-
+import b4a from 'b4a';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const sodium = require('sodium-universal') as any;
+import sodiumModule from 'sodium-universal';
+
+const sodium = sodiumModule as any;
 
 const CURVE_PK_BYTES = sodium.crypto_box_PUBLICKEYBYTES as number;
 const CURVE_SK_BYTES = sodium.crypto_box_SECRETKEYBYTES as number;
@@ -44,11 +43,11 @@ export function wrap(plaintext: Uint8Array, recipientEdPublicKey: Uint8Array): U
     );
   }
 
-  const curvePk = Buffer.alloc(CURVE_PK_BYTES);
-  sodium.crypto_sign_ed25519_pk_to_curve25519(curvePk, Buffer.from(recipientEdPublicKey));
+  const curvePk = b4a.alloc(CURVE_PK_BYTES);
+  sodium.crypto_sign_ed25519_pk_to_curve25519(curvePk, b4a.from(recipientEdPublicKey));
 
-  const sealed = Buffer.alloc(plaintext.length + SEAL_OVERHEAD);
-  sodium.crypto_box_seal(sealed, Buffer.from(plaintext), curvePk);
+  const sealed = b4a.alloc(plaintext.length + SEAL_OVERHEAD);
+  sodium.crypto_box_seal(sealed, b4a.from(plaintext), curvePk);
   return new Uint8Array(sealed);
 }
 
@@ -74,16 +73,16 @@ export function unwrap(sealed: Uint8Array, recipientEdSecretKey: Uint8Array): Ui
   // Sodium's ed25519 secret-key form is 32-byte seed || 32-byte pubkey.
   const edPk = recipientEdSecretKey.subarray(32, 64);
 
-  const curvePk = Buffer.alloc(CURVE_PK_BYTES);
-  sodium.crypto_sign_ed25519_pk_to_curve25519(curvePk, Buffer.from(edPk));
+  const curvePk = b4a.alloc(CURVE_PK_BYTES);
+  sodium.crypto_sign_ed25519_pk_to_curve25519(curvePk, b4a.from(edPk));
 
-  const curveSk = Buffer.alloc(CURVE_SK_BYTES);
-  sodium.crypto_sign_ed25519_sk_to_curve25519(curveSk, Buffer.from(recipientEdSecretKey));
+  const curveSk = b4a.alloc(CURVE_SK_BYTES);
+  sodium.crypto_sign_ed25519_sk_to_curve25519(curveSk, b4a.from(recipientEdSecretKey));
 
-  const plaintext = Buffer.alloc(sealed.length - SEAL_OVERHEAD);
+  const plaintext = b4a.alloc(sealed.length - SEAL_OVERHEAD);
   const ok = sodium.crypto_box_seal_open(
     plaintext,
-    Buffer.from(sealed),
+    b4a.from(sealed),
     curvePk,
     curveSk,
   ) as boolean;

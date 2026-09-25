@@ -16,7 +16,6 @@
 // public DHT, no host network impact). See docs/permissions-model.md
 // ("Lever 2 — Topic-layer").
 
-import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 import { createRuntime } from '@workspace.sh/p2p-runtime/node';
@@ -25,6 +24,8 @@ import { principalFromSeed } from '@workspace.sh/ucan-boundary';
 import {
   createEnvelope,
   verifyMembership,
+  topicIdForRoot,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
   type Principal,
 } from '@workspace.sh/portable-bootstrap';
@@ -43,10 +44,6 @@ function log(msg: string): void {
 function section(title: string): void {
   log('');
   log(`── ${title} ${'─'.repeat(Math.max(0, 56 - title.length))}`);
-}
-
-function topicFromWorkspaceId(workspaceId: string): string {
-  return createHash('sha256').update(`workspace://${workspaceId}`).digest('hex');
 }
 
 function seed(byte: number): Uint8Array {
@@ -91,7 +88,7 @@ async function main(): Promise<void> {
     const root = await principalFromSeed(seed(1));
     const fakeRoot = await principalFromSeed(seed(99));
     const rootDid = root.did();
-    const workspaceId = rootDid.slice('did:key:z'.length).slice(0, 32); // any stable id
+    const workspaceId = workspaceIdForRoot(rootDid);
     const resource = `workspace://v1/${workspaceId}`;
     const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
 
@@ -122,6 +119,7 @@ async function main(): Promise<void> {
           proof: { ucan: remoteProof },
           remotePublicKey,
           rootDid,
+          resource,
         });
         log(
           `    [${proofOwner}] connection from ${verdict.did?.slice(0, 24) ?? '?'}…: ` +
@@ -153,7 +151,7 @@ async function main(): Promise<void> {
     });
     runtimes.push(aliceRt, bobRt);
 
-    const topic = topicFromWorkspaceId(workspaceId);
+    const topic = topicIdForRoot(rootDid);
     log(`  topic: ${topic.slice(0, 24)}…`);
 
     const dataLog = await aliceRt.createLog();

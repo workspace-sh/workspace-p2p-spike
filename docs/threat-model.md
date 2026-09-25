@@ -102,6 +102,17 @@ The two levers Workspace uses to close future access are detailed in
 (rotate the symmetric key) and topic-layer (drop the peer from the
 Hyperswarm topic). Both are forward-only. Both are honest.
 
+"Future" needs one more qualification to stay honest, because the gate
+closes at a connection rather than at a moment. A revoked device is
+refused when it next presents its proof, so a session already in
+progress runs on until that connection ends; and each member begins
+refusing only once the revocation has replicated to it, so two members
+do not start at the same instant. Revocation therefore propagates at the
+speed of the log, not of the button. The window is small and the
+direction is right, but "removed" and "removed, and every device has
+heard" are not the same sentence, and only the second is a guarantee
+this system makes eventually rather than immediately.
+
 ---
 
 ## At-rest protection is environmental

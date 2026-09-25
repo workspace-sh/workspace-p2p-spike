@@ -100,7 +100,7 @@ async function main(): Promise<void> {
       });
       log('  ✗ Eve opened — should not happen');
     } catch (err) {
-      log(`  ✓ rejected: ${(err as Error).message.split('—')[0].trim()}`);
+      log(`  ✓ rejected: ${(err as Error).message.split('—')[0]!.trim()}`);
     }
 
     section('Summary');

@@ -24,7 +24,9 @@ declare module 'corestore' {
     writable: boolean;
     ready(): Promise<void>;
     close(): Promise<void>;
-    append(block: Uint8Array | Buffer): Promise<number>;
+    // hypercore accepts a single block or a batch; the batch form is what
+    // makes multi-block fixtures cheap to write.
+    append(blocks: Uint8Array | Buffer | Array<Uint8Array | Buffer>): Promise<number>;
     get(index: number, opts?: { wait?: boolean }): Promise<Uint8Array>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     on(event: string, cb: (...args: any[]) => void): this;
@@ -83,4 +85,35 @@ declare module 'compact-encoding' {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c: { raw: any; [k: string]: any };
   export default c;
+}
+
+// Imported statically (rather than via `createRequire`) so the module graph
+// can be packed for Bare — see #229. `createRequire` had been hiding the
+// absence of types on these two; declaring them is the cost of that fix.
+declare module 'hypercore-crypto' {
+  const hypercoreCrypto: {
+    keyPair(seed?: Uint8Array): { publicKey: Uint8Array; secretKey: Uint8Array };
+    sign(message: Uint8Array, secretKey: Uint8Array): Uint8Array;
+    verify(message: Uint8Array, signature: Uint8Array, publicKey: Uint8Array): boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [k: string]: any;
+  };
+  export default hypercoreCrypto;
+}
+
+declare module 'sodium-universal' {
+  const sodium: {
+    crypto_hash_sha256_BYTES: number;
+    crypto_hash_sha256(out: Uint8Array, input: Uint8Array): void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [k: string]: any;
+  };
+  export default sodium;
+}
+
+// Deep import of hypercore's replication message codecs — the transport form
+// (transport-form.ts) persists and replays wire.data messages verbatim.
+declare module 'hypercore/lib/messages.js' {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const wire: { data: any; [k: string]: any };
 }

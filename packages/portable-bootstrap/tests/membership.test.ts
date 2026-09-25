@@ -14,6 +14,7 @@ import {
   createEnvelope,
   createMembershipProof,
   verifyMembership,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
 } from '../src/index.ts';
 
@@ -37,7 +38,7 @@ const dummyKey = new Uint8Array(32); // membership cares about the UCAN, not the
 async function fixture() {
   const rootKp = seededKey(1);
   const root = await principalFromSeed(rootKp.secretKey.subarray(0, 32));
-  const workspaceId = rootKp.publicKey.toString('hex');
+  const workspaceId = workspaceIdForRoot(root.did());
   const resource = `workspace://v1/${workspaceId}`;
   const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
 
@@ -61,7 +62,7 @@ async function fixture() {
 // ---------------------------------------------------------------------------
 
 test('valid member: accepted, verdict carries the verified DID + capability', async () => {
-  const { root, proofFor } = await fixture();
+  const { root, resource, proofFor } = await fixture();
   const memberKp = seededKey(2);
   const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
 
@@ -70,6 +71,7 @@ test('valid member: accepted, verdict carries the verified DID + capability', as
     proof,
     remotePublicKey: memberKp.publicKey,
     rootDid: root.did(),
+    resource,
   });
 
   assert.equal(verdict.ok, true);
@@ -82,7 +84,7 @@ test('valid member: accepted, verdict carries the verified DID + capability', as
 // ---------------------------------------------------------------------------
 
 test('replay: a proof for member A presented on member B-authenticated connection is rejected', async () => {
-  const { root, proofFor } = await fixture();
+  const { root, resource, proofFor } = await fixture();
   const memberKp = seededKey(2);
   const attackerKp = seededKey(3);
   const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
@@ -94,6 +96,7 @@ test('replay: a proof for member A presented on member B-authenticated connectio
     proof: stolenProof,
     remotePublicKey: attackerKp.publicKey, // attacker's authenticated identity
     rootDid: root.did(),
+    resource,
   });
 
   assert.equal(verdict.ok, false);
@@ -105,7 +108,7 @@ test('replay: a proof for member A presented on member B-authenticated connectio
 // ---------------------------------------------------------------------------
 
 test('revoked: a member with a valid UCAN is rejected when isRevoked returns true', async () => {
-  const { root, proofFor } = await fixture();
+  const { root, resource, proofFor } = await fixture();
   const memberKp = seededKey(2);
   const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
 
@@ -114,6 +117,7 @@ test('revoked: a member with a valid UCAN is rejected when isRevoked returns tru
     proof,
     remotePublicKey: memberKp.publicKey,
     rootDid: root.did(),
+    resource,
     isRevoked: (did) => did === member.did(),
   });
 
@@ -122,7 +126,7 @@ test('revoked: a member with a valid UCAN is rejected when isRevoked returns tru
 });
 
 test('not revoked: isRevoked returning false for this DID still accepts', async () => {
-  const { root, proofFor } = await fixture();
+  const { root, resource, proofFor } = await fixture();
   const memberKp = seededKey(2);
   const other = seededKey(8);
   const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
@@ -133,6 +137,7 @@ test('not revoked: isRevoked returning false for this DID still accepts', async 
     proof,
     remotePublicKey: memberKp.publicKey,
     rootDid: root.did(),
+    resource,
     isRevoked: (did) => did === otherPrincipal.did(), // someone else is revoked
   });
 
@@ -144,7 +149,7 @@ test('not revoked: isRevoked returning false for this DID still accepts', async 
 // ---------------------------------------------------------------------------
 
 test('expired: a UCAN whose expiration is in the past is rejected', async () => {
-  const { root, proofFor } = await fixture();
+  const { root, resource, proofFor } = await fixture();
   const memberKp = seededKey(2);
   const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
 
@@ -155,6 +160,7 @@ test('expired: a UCAN whose expiration is in the past is rejected', async () => 
     proof,
     remotePublicKey: memberKp.publicKey,
     rootDid: root.did(),
+    resource,
   });
 
   assert.equal(verdict.ok, false);
@@ -166,7 +172,7 @@ test('expired: a UCAN whose expiration is in the past is rejected', async () => 
 // ---------------------------------------------------------------------------
 
 test('wrong root: a UCAN delegated by a non-root issuer is rejected', async () => {
-  const { root, proofFor } = await fixture();
+  const { root, resource, proofFor } = await fixture();
   const fakeRootKp = seededKey(9);
   const fakeRoot = await principalFromSeed(fakeRootKp.secretKey.subarray(0, 32));
   const memberKp = seededKey(2);
@@ -178,10 +184,37 @@ test('wrong root: a UCAN delegated by a non-root issuer is rejected', async () =
     proof,
     remotePublicKey: memberKp.publicKey,
     rootDid: root.did(),
+    resource,
   });
 
   assert.equal(verdict.ok, false);
   assert.match(verdict.reason!, /validation failed/);
+});
+
+// A proof whose issuer field names the real root is accepted only if the root
+// signed it; one signed with any other key is rejected.
+test('forged root: a UCAN naming the real root as issuer but signed by another key is rejected', async () => {
+  const { root, resource, proofFor } = await fixture();
+  const eveKp = seededKey(3);
+  const eve = await principalFromSeed(eveKp.secretKey.subarray(0, 32));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const eveSigner = (eve as any)._signer;
+  const posingAsRoot = {
+    did: () => root.did(),
+    _signer: { toString: () => root.did(), signatureType: eveSigner.signatureType, sign: (m: Uint8Array) => eveSigner.sign(m) },
+  } as typeof root;
+
+  // Eve's own authenticated connection, presenting a proof addressed to her.
+  const proof = await proofFor(eve.did(), posingAsRoot);
+  const verdict = await verifyMembership({
+    proof,
+    remotePublicKey: eveKp.publicKey,
+    rootDid: root.did(),
+    resource,
+  });
+
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reason!, /not signed by its issuer/);
 });
 
 // ---------------------------------------------------------------------------
@@ -189,19 +222,20 @@ test('wrong root: a UCAN delegated by a non-root issuer is rejected', async () =
 // ---------------------------------------------------------------------------
 
 test('garbage proof: undecodable UCAN bytes are rejected, not thrown', async () => {
-  const { root } = await fixture();
+  const { root, resource } = await fixture();
   const memberKp = seededKey(2);
   const verdict = await verifyMembership({
     proof: { ucan: new Uint8Array([1, 2, 3, 4]) },
     remotePublicKey: memberKp.publicKey,
     rootDid: root.did(),
+    resource,
   });
   assert.equal(verdict.ok, false);
   assert.match(verdict.reason!, /undecodable proof/);
 });
 
 test('bad remote key: a wrong-length public key is rejected, not thrown', async () => {
-  const { root, proofFor } = await fixture();
+  const { root, resource, proofFor } = await fixture();
   const memberKp = seededKey(2);
   const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
   const proof = await proofFor(member.did());
@@ -210,7 +244,51 @@ test('bad remote key: a wrong-length public key is rejected, not thrown', async 
     proof,
     remotePublicKey: new Uint8Array(16), // not a 32-byte ed25519 key
     rootDid: root.did(),
+    resource,
   });
   assert.equal(verdict.ok, false);
   assert.match(verdict.reason!, /bad remote key/);
+});
+
+// ---------------------------------------------------------------------------
+// The proof must be for this workspace
+// ---------------------------------------------------------------------------
+
+test('other workspace: a genuine root-signed proof for a different resource is rejected', async () => {
+  const { root, resource } = await fixture();
+  const memberKp = seededKey(2);
+  const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
+  const elsewhere = `workspace://v1/${'ab'.repeat(32)}`;
+  const env = await createEnvelope(
+    { did: member.did(), resource: elsewhere, key: dummyKey, capability: { can: 'workspace/read', with: elsewhere } },
+    root,
+  );
+
+  const verdict = await verifyMembership({
+    proof: createMembershipProof(env.ucan),
+    remotePublicKey: memberKp.publicKey,
+    rootDid: root.did(),
+    resource,
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reason!, /not a workspace capability on/);
+});
+
+test('other capability: a genuine root-signed proof for a non-workspace capability is rejected', async () => {
+  const { root, resource } = await fixture();
+  const memberKp = seededKey(2);
+  const member = await principalFromSeed(memberKp.secretKey.subarray(0, 32));
+  const env = await createEnvelope(
+    { did: member.did(), resource, key: dummyKey, capability: { can: 'table/edit', with: resource } },
+    root,
+  );
+
+  const verdict = await verifyMembership({
+    proof: createMembershipProof(env.ucan),
+    remotePublicKey: memberKp.publicKey,
+    rootDid: root.did(),
+    resource,
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reason!, /not a workspace capability on/);
 });

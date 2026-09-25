@@ -2,9 +2,20 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "react-native": [
+        "../p2p-runtime/src/stubs/react-native.d.ts"
+      ]
+    }
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "../p2p-runtime/src/ambient.d.ts"
+  ]
 }

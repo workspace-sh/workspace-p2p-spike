@@ -23,6 +23,7 @@ measures the cost of *joining*, not of syncing.
 |---|---|---|---|---|
 | 5G cellular (carrier NAT presumed) | macOS 15, Node 23 | 73 ms / 72 ms | **40,276 ms / 40,350 ms** | Two runs 0.2% apart. See "Suspected timeouts". |
 | Home Wi-Fi (unrestricted) | macOS | — | — | to populate |
+| Home Wi-Fi (unrestricted) | Fedora 44, Node 24.18 | 50 / 49 / 48 ms | **2,797 / 2,099 / 2,499 ms** | Three runs, 33% spread. Announce appears to succeed — see "Suspected timeouts". |
 | Home Wi-Fi | iOS (Bare) | — | — | to populate |
 | Home Wi-Fi | Android (Bare) | — | — | to populate |
 | Ethernet | macOS | — | — | to populate |
@@ -48,6 +49,11 @@ changes, "joined" means only "the call returned".
 Any row that comes back suspiciously round, or suspiciously consistent, should
 be treated as a timeout until proven otherwise. Record the raw numbers rather
 than an average, so the tell stays visible.
+
+The Linux home Wi-Fi row is the contrasting case, and worth keeping for that
+reason: three runs spread across 2.1–2.8 s, about 33%. That is what organic
+network latency looks like. A connection where the announce genuinely lands
+varies; the 5G row does not, which is the whole argument.
 
 ## What this means for the app
 
