@@ -6,5 +6,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": ["src/**/*", "tests/**/*", "../p2p-runtime/src/ambient.d.ts"]
 }

@@ -13,7 +13,6 @@
 // See docs/discovery-layers.md for why we do this (and how it relates to
 // the layered local / LAN / WAN discovery story).
 
-import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,6 +26,7 @@ import {
   consumeBundle,
   writeBundleFolder,
   readBundleFolder,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
 } from '@workspace.sh/portable-bootstrap';
 
@@ -58,10 +58,6 @@ function log(msg: string): void {
 function section(title: string): void {
   log('');
   log(`── ${title} ${'─'.repeat(Math.max(0, 60 - title.length))}`);
-}
-
-function topicFromWorkspaceId(workspaceId: string): string {
-  return createHash('sha256').update(`workspace://${workspaceId}`).digest('hex');
 }
 
 function seededKeypair(byte: number): { publicKey: Buffer; secretKey: Buffer } {
@@ -130,12 +126,11 @@ async function main(): Promise<void> {
     const k0Org = new Uint8Array(32);
     crypto.getRandomValues(k0Org);
 
-    const workspaceId = aliceKp.publicKey.toString('hex');
+    const workspaceId = workspaceIdForRoot(alice.did());
     const resource = `workspace://v1/${workspaceId}`;
     const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
 
     const bundle = await createBundle({
-      workspaceId,
       createdAt: Math.floor(Date.now() / 1000),
       root: alice,
       rootSecretKey: aliceKp.secretKey,
@@ -201,7 +196,8 @@ async function main(): Promise<void> {
     section('Topic join + replication over the private swarm');
     // ---------------------------------------------------------------------
 
-    const topic = topicFromWorkspaceId(workspaceId);
+    // The topic the manifest names: SHA-256 of the root's public key.
+    const topic = bundle.manifest.topicId;
     log(`  topic: ${topic.slice(0, 24)}…`);
     await aliceRt.joinTopic(topic);
     await bobRt.joinTopic(topic);

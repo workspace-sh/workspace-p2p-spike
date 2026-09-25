@@ -322,7 +322,7 @@ workspace://v1/z6Mk…#invite=<code>
 ### No names in a link
 
 A link never carries a name — not the workspace's, not a heading's, whether in
-the path, the query or the fragment (Leslie, 16 Sep 2026). A name in a link is
+the path, the query or the fragment (decided 16 Sep 2026). A name in a link is
 text written by whoever wrote the link, so an app that showed it would be
 repeating a stranger's claim about which workspace this is, and a link would
 leak the name to every channel it passes through.
@@ -343,7 +343,7 @@ Workspaces with strict privacy posture should use the `policy.json` workspace po
 When an app opens a `workspace://` URI:
 
 1. **Parse the URI** — extract the workspace pubkey from the path; parse the version; identify the resource type from the next path segment. If the fragment carries `invite`, claim it first ([`join-by-link.md`](./join-by-link.md) § Claiming an invite)
-2. **Derive the Hyperswarm topic** — SHA-256 of the pubkey bytes
+2. **Derive the Hyperswarm topic** — SHA-256 of the 32-byte public key (without the multicodec prefix), the value a new workspace records as `manifest.topicId`
 3. **Discover peers** — join the Hyperswarm topic via DHT; in parallel, try any `relays` query hints for faster cold-start
 4. **Fetch the workspace bootstrap** — `manifest.json` + `attestation.json` from any peer (~2 KB)
 5. **Verify the attestation** — the signature verifies against the URI's pubkey; reject if not
@@ -507,15 +507,19 @@ Honest accounting of what an outsider (no workspace access) learns from a `works
 - The resource's *type category* (document / user / team), via the path namespace
 - For an invite link: a bearer invite, which admits whoever claims it first until it is used, expires or is revoked
 - For sub-resources via the locator: the locator form (structural address, opaque ID, or positional) — which narrows the format type. Not the locator's *meaning*.
+- **Who is in the workspace, as it is built today.** The id is also the topic, so a holder can join it and see which devices are online and from where; and the root-signed grant index lists every grant, each of which is a UCAN naming the device it was sealed for. So a URL is enough to enumerate a workspace's devices and watch when they appear. This is a gap rather than a design: it is tracked as workspace-sh/workspace#533, whose fix encrypts a grant under a key derived from the root and device keys together, so only someone who already knows a device can find its grant.
 
 What does NOT leak:
 
 - Contents
 - Resource names or titles (no slugs in canonical URIs; opaque IDs for semantic locators)
-- Membership of the workspace
 - Who created or owns the resource
 - When it was created
 - The workspace's friendly name
+
+Until workspace-sh/workspace#533 lands, treat a link as naming the workspace's
+devices as well as the workspace. A link shared in a group chat tells everyone
+in that chat which devices belong to it.
 
 For sensitivity beyond what this provides — e.g. a workspace whose *existence* must remain unknown to non-members — the answer is don't share its URI in any context that reaches non-members. The URI scheme can't defend against URLs being copied into public places by their holders; only against information being readable in URLs that legitimately reach the wrong audience.
 

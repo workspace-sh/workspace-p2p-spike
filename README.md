@@ -184,7 +184,7 @@ Active development on [`feat/permissions-layer`](https://github.com/workspace-sh
 ├─────────────────────────────────────────────────────────────────────┤
 │  Bootstrap envelopes + bundled manifest + root attestation          │  ← @workspace.sh/portable-bootstrap
 ├─────────────────────────────────────────────────────────────────────┤
-│  UCAN delegations (issue, validate, serialise, canIssue override)   │  ← @workspace.sh/ucan-boundary
+│  UCAN 1.0 delegations (issue, validate, serialise) via iso-ucan     │  ← @workspace.sh/ucan-boundary
 ├─────────────────────────────────────────────────────────────────────┤
 │  Wrap primitive + root attestation + did:key encode/decode          │  ← @workspace.sh/p2p-runtime (crypto)
 ├─────────────────────────────────────────────────────────────────────┤
@@ -217,7 +217,7 @@ workspace was distributed.
 │   ├── risks.md                         ← where this could fail and what we're doing
 │   ├── ucan-prior-research.md           ← UCAN library notes from earlier spike
 │   └── adr/                             ← architecture decision records
-│       ├── 0001-ucan-library.md         ← ucanto (not iso-ucan)
+│       ├── 0001-ucan-library.md         ← superseded: UCAN 1.0 via iso-ucan
 │       └── 0002-autobase-merge-strategy.md ← per-format LWW over Autobase
 ├── packages/
 │   ├── p2p-runtime/                     ← @workspace.sh/p2p-runtime
@@ -228,7 +228,7 @@ workspace was distributed.
 │   │       ├── wrap.ts                  ← X25519 ECDH sealed envelopes
 │   │       └── attestation.ts           ← root attestation sign/verify
 │   ├── ucan-boundary/                   ← @workspace.sh/ucan-boundary
-│   │   └── src/index.ts                 ← every ucanto call lives here
+│   │   └── src/index.ts                 ← every UCAN library call lives here
 │   ├── portable-bootstrap/              ← @workspace.sh/portable-bootstrap
 │   │   └── src/
 │   │       ├── index.ts                 ← createBundle / consumeBundle / createEnvelope

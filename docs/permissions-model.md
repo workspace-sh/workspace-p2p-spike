@@ -312,10 +312,11 @@ from encryption-layer access.
   - the granted capability is a `workspace/` capability on this
     workspace's own resource URI.
 
-  It also takes an `isRevoked` check for revoked DIDs. A sniffed UCAN
-  replayed on another peer's connection fails the audience bind; a
-  delegation that names the root as issuer but was signed by another key
-  fails the signature check.
+  It also takes an `isRevoked` check, which a workspace answers from the
+  revocation blocks it has read off the key delivery log (below). A
+  sniffed UCAN replayed on another peer's connection fails the audience
+  bind; a delegation that names the root as issuer but was signed by
+  another key fails the signature check.
 
 The remaining piece is **topic rotation** (point 2) — rotating the
 discovery topic alongside `K0_org` on departure so a revoked peer can't
@@ -323,30 +324,74 @@ even rediscover the swarm. Tracked with the broader rotation work.
 
 ### Revocation notice block on the key delivery log
 
-When a peer is revoked, an admin appends a signed **revocation block**
+When a peer is revoked, the root appends a signed **revocation block**
 to the key delivery log:
 
 ```json
 {
-  "kind": "revocation",
+  "kind": "workspace/revocation@1",
   "subject": "did:key:zMarco…",
-  "revokedAt": 1717200000,
-  "issuer": "did:key:zLeslie…",
-  "signature": "<base64-ed25519-signature>"
+  "at": 1717200000,
+  "signature": "<hex-ed25519-signature>"
 }
 ```
 
-Signed by the issuer (an admin with revoke capability over the
-subject's chain). Replicated to all peers. The subject's app sees
-the block on next sync, reads the workspace's
-[`.workspace/policy.json`](./workspace-format.md), and runs whatever
-cleanup the policy declares.
+The kind is versioned to match the `workspace/key-delivery@1` records
+beside it, so one log carries both and a scanner takes only what it
+recognises. A peer on an older build meets a revocation block, does not
+know the kind, and skips it — it goes on admitting the device until the
+delegation expires, rather than failing.
 
-This is **cooperative-client behaviour** — a hint to well-behaved
-apps, not a cryptographic enforcement. A modified client can ignore
-the revocation notice. The cryptographic levers (key rotation,
-topic-layer rejection) carry the actual security load. See
-[`threat-model.md`](./threat-model.md) for the contract.
+**What is signed** is `"workspace revocation\0" ‖ root key ‖ subject
+key ‖ at`. The root key is in it so a revocation cannot be lifted out of
+one workspace and replayed into another holding the same device; `at`
+is in it so the date cannot be edited afterwards.
+
+**The root signs, and there is no `issuer` field.** v1 has one authority
+— the root — so naming an issuer would imply a delegated revoke
+capability that does not exist. The field returns when sub-delegation
+does, along with the question of whose chains an admin may cut.
+
+#### This is enforced, not advisory
+
+The block is checked at the membership gate: `verifyMembership` takes an
+`isRevoked` predicate, and a workspace answers it from the revocations
+it has read. A revoked device is refused when it presents its proof, so
+a modified client gains nothing by ignoring its own revocation — the
+refusal happens on the other device.
+
+What remains cooperative is only the local cleanup a revoked peer's own
+app does on seeing the block. The revoked device reads the block too when it
+is connected at the time, and the apps say so — "Access revoked" in place
+of a peer count, which for a revoked device is misleading
+(workspace-sh/workspace#600, #602). A device revoked while offline reads
+it from nobody, since every member refuses it, so its silence is not
+evidence either way.
+
+#### What it does not do
+
+Forward-only is not the whole of it, and the rest is easy to miss:
+
+- **It takes effect at the next connection.** A connection already open
+  is not closed, so a revoked device that is mid-session keeps
+  replicating until that connection ends for some other reason.
+- **It is not simultaneous.** Each member enforces a revocation once the
+  block reaches *its* replica of the log. A member that admitted the
+  revoked device before reading it goes on serving that device — so a
+  revocation propagates at the speed of the log, not of the click.
+  Every member keeps the whole key delivery log downloading as it grows,
+  so a connected member has the block within moments (about 200 ms on a
+  local testnet). Before workspace-sh/workspace#599 no member did: a
+  replica fetches no block unless asked, the scan read only what was
+  local, and only the root's own device ever held a revocation.
+- **It recalls nothing.** Whatever already replicated is on that device.
+- **It does not re-key.** Writes made before a rotation stay readable to
+  anyone already holding `K0_org`, which is why the two levers in this
+  section are two.
+
+A gate refusal is therefore "this device gets nothing further from me,
+from now on", and an interface that says "removed" while any of the
+above is true is claiming more than happened.
 
 The revocation block being part of the replicated log means a
 revoked peer cannot escape it by deleting their local copy — next
@@ -422,11 +467,12 @@ address is never shared with the wider org.
 - **Wrap primitive** — X25519 ECDH sealing for delivery envelopes
   (`packages/p2p-runtime/src/wrap.ts`)
 - **Root attestation** — sign + verify over `(workspaceId, createdAt,
-  formatVersion)` (`packages/p2p-runtime/src/attestation.ts`)
-- **UCAN boundary** — issueDelegation; validateDelegation verifying
-  every link's signature, delegation, capability and validity window up
-  to the declared root (canIssue override); serialise; whole-second
-  expiry handling (`packages/ucan-boundary`)
+  formatVersion, topicId, logs)` (`packages/p2p-runtime/src/attestation.ts`)
+- **UCAN boundary** — UCAN 1.0 delegations through `iso-ucan`:
+  issueDelegation; validateDelegation verifying every link's signature,
+  delegation, subject, segment-bounded command, resource policy and
+  validity window up to the self-issued root; serialise; whole-second
+  expiry handling (`packages/ucan-boundary`, ADR 0001)
 - **Bootstrap envelopes** — bundle creation, consumption, JSON
   serialisation, tamper detection (`packages/portable-bootstrap`)
 - **Live key delivery log (#9)** — `publishDelivery` / `scanDeliveries`
@@ -502,7 +548,8 @@ address is never shared with the wider org.
   each other (local / LAN / WAN) before this protocol takes over
 - [`FINDINGS.md`](../FINDINGS.md) — spike verdict + extraction checklist
 - [`docs/ucan-prior-research.md`](./ucan-prior-research.md) — UCAN
-  library notes (ucanto `canIssue` gotcha, library comparison)
+  library notes from the earlier spike (library comparison; ucanto
+  specifics predate the move to iso-ucan)
 - [`table-file-format/docs/PERMISSIONS.md`](https://github.com/workspace-sh/table-file-format/blob/develop/docs/PERMISSIONS.md) —
   consumer-side view of this same model, per file type
 - [Issue #5](https://github.com/workspace-sh/workspace-p2p-spike/issues/5) —

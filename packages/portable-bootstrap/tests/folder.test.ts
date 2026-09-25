@@ -17,6 +17,7 @@ import {
   consumeBundle,
   writeBundleFolder,
   readBundleFolder,
+  FORMAT_VERSION,
   type CapabilityDescriptor,
 } from '../src/index.ts';
 
@@ -63,7 +64,6 @@ test('round-trip: writeBundleFolder → readBundleFolder produces an equivalent 
   crypto.getRandomValues(k0);
 
   const original = await createBundle({
-    workspaceId: 'wid-folder',
     createdAt: 1717200000,
     root,
     rootSecretKey: rootKp.secretKey,
@@ -117,7 +117,6 @@ test('end-to-end from disk: a consumer can unwrap their key after reading from a
   crypto.getRandomValues(k0);
 
   const bundle = await createBundle({
-    workspaceId: 'wid-disk',
     createdAt: 1717200000,
     root,
     rootSecretKey: rootKp.secretKey,
@@ -135,7 +134,7 @@ test('end-to-end from disk: a consumer can unwrap their key after reading from a
     const view = await consumeBundle(restored, alice.did(), aliceKp.secretKey);
 
     assert.ok(view.mine);
-    assert.equal(view.workspaceId, 'wid-disk');
+    assert.equal(view.workspaceId, bundle.manifest.workspaceId);
     assert.deepEqual(Array.from(view.mine.key), Array.from(k0));
   });
 });
@@ -154,7 +153,6 @@ test('on-disk layout: .workspace/ holds manifest, attestation, and envelopes/ su
   crypto.getRandomValues(key);
 
   const bundle = await createBundle({
-    workspaceId: 'wid-layout',
     createdAt: 1717200000,
     root,
     rootSecretKey: rootKp.secretKey,
@@ -187,8 +185,9 @@ test('on-disk layout: .workspace/ holds manifest, attestation, and envelopes/ su
     // Manifest content is valid JSON with the expected fields.
     const manifestText = await readFile(join(meta, 'manifest.json'), 'utf8');
     const manifest = JSON.parse(manifestText) as Record<string, unknown>;
-    assert.equal(manifest.workspaceId, 'wid-layout');
-    assert.equal(manifest.formatVersion, 1);
+    assert.equal(manifest.workspaceId, bundle.manifest.workspaceId);
+    assert.equal(manifest.formatVersion, FORMAT_VERSION);
+    assert.equal(manifest.topicId, bundle.manifest.topicId);
     assert.equal(manifest.rootDid, root.did());
   });
 });
@@ -202,7 +201,6 @@ test('light bundle: no recipients writes an empty envelopes/ and reads back clea
   const root = await principalFromSeed(rootKp.secretKey.subarray(0, 32));
 
   const bundle = await createBundle({
-    workspaceId: 'wid-light',
     createdAt: 1717200000,
     root,
     rootSecretKey: rootKp.secretKey,
@@ -213,6 +211,6 @@ test('light bundle: no recipients writes an empty envelopes/ and reads back clea
     await writeBundleFolder(bundle, dir);
     const restored = await readBundleFolder(dir);
     assert.equal(restored.envelopes.length, 0);
-    assert.equal(restored.manifest.workspaceId, 'wid-light');
+    assert.equal(restored.manifest.workspaceId, bundle.manifest.workspaceId);
   });
 });

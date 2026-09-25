@@ -15,6 +15,7 @@ import {
   createEnvelope,
   publishDelivery,
   scanDeliveries,
+  workspaceIdForRoot,
   type CapabilityDescriptor,
 } from '../src/index.ts';
 
@@ -69,7 +70,7 @@ const enc = new TextEncoder();
 async function fixture() {
   const rootKp = seededKey(1);
   const root = await principalFromSeed(rootKp.secretKey.subarray(0, 32));
-  const workspaceId = rootKp.publicKey.toString('hex');
+  const workspaceId = workspaceIdForRoot(root.did());
   const resource = `workspace://v1/${workspaceId}`;
   const capability: CapabilityDescriptor = { can: 'workspace/read', with: resource };
   return { rootKp, root, resource, capability };

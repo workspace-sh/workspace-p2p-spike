@@ -9,11 +9,14 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { didFromSeed, type CreateRuntimeOptions, type Log, type LogKey, type P2PRuntime, type Did } from '@workspace.sh/p2p-runtime';
+import { didFromSeed, publicKeyFromDid, type CreateRuntimeOptions, type Log, type LogKey, type P2PRuntime, type Did } from '@workspace.sh/p2p-runtime';
+import { readBundleFolder } from '@workspace.sh/portable-bootstrap';
+
 import { Workspace } from '../src/index.ts';
 
 const enc = new TextEncoder();
@@ -106,7 +109,7 @@ test('create: produces an admin workspace with a stable id and root identity', a
     assert.equal(ws.isAdmin, true);
     assert.equal(ws.did, ws.rootDid); // creator IS root in v1
     assert.equal(ws.did, didFromSeed(ROOT_SEED));
-    assert.ok(ws.id.length === 64); // root pubkey hex
+    assert.equal(`did:key:${ws.id}`, ws.rootDid); // the root DID's multibase key
     assert.equal(ws.length, 0);
     await ws.close();
   });
@@ -167,6 +170,50 @@ test('invite + open: an invited member opens the folder and reads the data', asy
   });
 });
 
+test('the creator can close and reopen their own workspace', async () => {
+  const createRuntime = makeRuntimeFactory();
+  await withTmp(async (folder) => {
+    const admin = await Workspace.create({ createRuntime, folder, rootSeed: ROOT_SEED });
+    const rootDid = admin.rootDid;
+    const id = admin.id;
+    await admin.write(enc.encode('written before closing'));
+    await admin.close();
+
+    // The gap this covers: `create` built the creator's envelope, took its
+    // UCAN for the auth gate and discarded it, so the folder was written with
+    // no envelopes. Everything worked until the process that created the
+    // workspace went away — and then its own author was locked out. Being
+    // root is not what `open` checks; it looks for an envelope addressed to
+    // the opening DID, exactly as it does for anyone else.
+    const reopened = await Workspace.open({ createRuntime, folder, identitySeed: ROOT_SEED });
+    assert.equal(reopened.id, id);
+    assert.equal(reopened.rootDid, rootDid);
+    assert.equal(reopened.did, rootDid);
+
+    const entries = await reopened.entries();
+    assert.deepEqual(entries.map((e) => dec.decode(e)), ['written before closing']);
+
+    await reopened.close();
+  });
+});
+
+test('create: records the creator as a member on disk, not only in memory', async () => {
+  const createRuntime = makeRuntimeFactory();
+  await withTmp(async (folder) => {
+    const admin = await Workspace.create({ createRuntime, folder, rootSeed: ROOT_SEED });
+    await admin.close();
+
+    // Asserted against the folder rather than a reopened handle, so a
+    // regression is reported as "nothing was persisted" rather than as a
+    // failure further downstream.
+    const bundle = await readBundleFolder(folder);
+    assert.equal(bundle.envelopes.length, 1);
+    const [selfEnvelope] = bundle.envelopes;
+    assert.ok(selfEnvelope, 'the creator should have an envelope written to disk');
+    assert.equal(selfEnvelope.recipient, didFromSeed(ROOT_SEED));
+  });
+});
+
 test('open without an envelope is rejected', async () => {
   const createRuntime = makeRuntimeFactory();
   await withTmp(async (folder) => {
@@ -188,9 +235,51 @@ test('a member cannot invite (no root key)', async () => {
     const bob = await Workspace.open({ createRuntime, folder, identitySeed: BOB_SEED });
 
     await assert.rejects(() => bob.invite(didFromSeed(EVE_SEED)), /only an admin/);
+    // And reads: the logs belong to the store that created them.
+    assert.equal(admin.writable, true);
+    assert.equal(bob.writable, false);
 
     await admin.close();
     await bob.close();
+  });
+});
+
+test('the creating device reopens as an admin with the root seed, and can invite', async () => {
+  const DEVICE_SEED = new Uint8Array(32).fill(9);
+  const createRuntime = makeRuntimeFactory();
+  await withTmp(async (folder) => {
+    const created = await Workspace.create({ createRuntime, folder, rootSeed: ROOT_SEED, identitySeed: DEVICE_SEED });
+    await created.close();
+
+    const plain = await Workspace.open({ createRuntime, folder, identitySeed: DEVICE_SEED });
+    assert.equal(plain.isAdmin, false, 'without the root seed the handle is a member');
+    await plain.close();
+
+    // This fake runtime opens every existing log read-only, as a store other
+    // than the creating one does: the invite still lands in the folder.
+    const admin = await Workspace.open({ createRuntime, folder, identitySeed: DEVICE_SEED, rootSeed: ROOT_SEED });
+    assert.equal(admin.isAdmin, true);
+    await admin.invite(didFromSeed(BOB_SEED));
+    await admin.close();
+
+    const bob = await Workspace.open({ createRuntime, folder, identitySeed: BOB_SEED });
+    assert.equal(bob.rootDid, admin.rootDid);
+    await bob.close();
+  });
+});
+
+test('a root seed that is not this workspace\'s is refused', async () => {
+  const DEVICE_SEED = new Uint8Array(32).fill(9);
+  const OTHER_ROOT = new Uint8Array(32).fill(5);
+  const createRuntime = makeRuntimeFactory();
+  await withTmp(async (folder) => {
+    const created = await Workspace.create({ createRuntime, folder, rootSeed: ROOT_SEED, identitySeed: DEVICE_SEED });
+    await created.close();
+
+    await assert.rejects(
+      () => Workspace.open({ createRuntime, folder, identitySeed: DEVICE_SEED, rootSeed: OTHER_ROOT }),
+      /does not belong to workspace/,
+    );
   });
 });
 
@@ -216,5 +305,238 @@ test('a write by the admin propagates to an open member via change events', asyn
 
     await admin.close();
     await bob.close();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Local-first open (#313)
+// ---------------------------------------------------------------------------
+//
+// Measured on a cellular connection: opening the corestore takes 73 ms and
+// flushing the DHT announce takes 40 SECONDS. `create` and `open` awaited that
+// announce before returning, so every local operation waited on a network
+// round trip — which is not what local-first means.
+
+/** The standard fake, with `joinTopic` replaced. */
+function factoryWithJoin(
+  joinTopic: (topic: string) => Promise<void>,
+  replicates?: boolean,
+): (opts: CreateRuntimeOptions) => Promise<P2PRuntime> {
+  const base = makeRuntimeFactory();
+  return async (opts) => {
+    const runtime = await base(opts);
+    return { ...runtime, joinTopic, ...(replicates === undefined ? {} : { replicates }) } as P2PRuntime;
+  };
+}
+
+test('create and open meet peers on the topic the manifest names, a hash of the root key', async () => {
+  const joined: string[] = [];
+  const createRuntime = factoryWithJoin(async (topic) => {
+    joined.push(topic);
+  });
+  await withTmp(async (folder) => {
+    const ws = await Workspace.create({ createRuntime, folder, rootSeed: ROOT_SEED });
+    await ws.close();
+    const reopened = await Workspace.open({ createRuntime, folder, identitySeed: ROOT_SEED });
+    await reopened.close();
+
+    const { manifest } = await readBundleFolder(folder);
+    const rootKey = createHash('sha256').update(publicKeyFromDid(manifest.rootDid)).digest('hex');
+    assert.equal(manifest.topicId, rootKey);
+    assert.deepEqual(joined, [rootKey, rootKey]);
+  });
+});
+
+test('create does not wait for the swarm announce', async () => {
+  // The announce never settles. If `create` awaited it this would hang rather
+  // than fail — which is exactly what the app did for 40 seconds.
+  let release: (() => void) | null = null;
+  const createRuntime = factoryWithJoin(
+    () => new Promise<void>((resolve) => { release = resolve; }),
+  );
+
+  await withTmp(async (folder) => {
+    const started = Date.now();
+    const ws = await Workspace.create({ createRuntime, folder, name: 'Acme', rootSeed: ROOT_SEED });
+    // Generous: the point is "did not wait for something that never happens",
+    // not a performance assertion that would flake on a loaded machine.
+    assert.ok(Date.now() - started < 5000, 'create returned without the announce');
+    assert.equal(ws.isAdmin, true, 'and the workspace is fully usable');
+    await ws.write(new TextEncoder().encode('a local write, with no network'));
+    assert.equal(ws.length, 1);
+    release?.();
+    await ws.close();
+  });
+});
+
+test('a failed announce does not fail the open, and stays observable', async () => {
+  // A restricted network is a normal condition — carrier NAT blocks the UDP
+  // hole-punching an announce needs — and must not deny someone their own
+  // files. But it has to be inspectable rather than silent, or "no peers
+  // nearby" and "never announced" look identical.
+  const createRuntime = factoryWithJoin(() => Promise.reject(new Error('no route to host')));
+
+  await withTmp(async (folder) => {
+    const ws = await Workspace.create({ createRuntime, folder, name: 'Acme', rootSeed: ROOT_SEED });
+    await assert.rejects(() => ws.announced, /no route to host/);
+    // Still fully usable.
+    await ws.write(new TextEncoder().encode('written anyway'));
+    assert.equal(ws.length, 1);
+    await ws.close();
+  });
+});
+
+test('status: announce moves from pending to announced, and listeners hear it', async () => {
+  let release: (() => void) | null = null;
+  const createRuntime = factoryWithJoin(() => new Promise<void>((resolve) => { release = resolve; }));
+  await withTmp(async (folder) => {
+    const ws = await Workspace.create({ createRuntime, folder, name: 'Acme', rootSeed: ROOT_SEED });
+    assert.deepEqual(ws.status(), { peers: 0, announce: 'pending', writable: true });
+    const heard: string[] = [];
+    ws.onStatus((s) => heard.push(s.announce));
+    release?.();
+    await ws.announced;
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(ws.status().announce, 'announced');
+    assert.deepEqual(heard, ['announced']);
+    await ws.close();
+  });
+});
+
+test('status: a failed announce says failed, and a local-only runtime says local-only', async () => {
+  await withTmp(async (folder) => {
+    const failing = await Workspace.create({
+      createRuntime: factoryWithJoin(() => Promise.reject(new Error('no route to host'))),
+      folder,
+      name: 'Acme',
+      rootSeed: ROOT_SEED,
+    });
+    await assert.rejects(() => failing.announced);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(failing.status().announce, 'failed');
+    await failing.close();
+  });
+  await withTmp(async (folder) => {
+    const local = await Workspace.create({
+      createRuntime: factoryWithJoin(() => Promise.reject(new Error('never called')), false),
+      folder,
+      name: 'Acme',
+      rootSeed: ROOT_SEED,
+    });
+    assert.equal(local.status().announce, 'local-only');
+    await local.close();
+  });
+});
+
+test('status: peers come from the runtime, and a change reaches listeners', async () => {
+  const base = makeRuntimeFactory();
+  let count = 0;
+  const notify = new Set<(n: number) => void>();
+  const createRuntime = async (opts: CreateRuntimeOptions) => ({
+    ...(await base(opts)),
+    peerCount: () => count,
+    onPeersChanged: (cb: (n: number) => void) => {
+      notify.add(cb);
+      return () => notify.delete(cb);
+    },
+  }) as P2PRuntime;
+  await withTmp(async (folder) => {
+    const ws = await Workspace.create({ createRuntime, folder, name: 'Acme', rootSeed: ROOT_SEED });
+    const heard: number[] = [];
+    ws.onStatus((s) => heard.push(s.peers));
+    count = 1;
+    for (const cb of notify) cb(1);
+    assert.equal(ws.status().peers, 1);
+    assert.deepEqual(heard, [1]);
+    await ws.close();
+    assert.equal(notify.size, 0, 'closing stops listening to the runtime');
+  });
+});
+
+test('a local-only runtime never announces, and resolves rather than throwing', async () => {
+  const createRuntime = factoryWithJoin(
+    () => Promise.reject(new Error('joinTopic must not be called on a local-only runtime')),
+    false,
+  );
+
+  await withTmp(async (folder) => {
+    const ws = await Workspace.create({ createRuntime, folder, name: 'Acme', rootSeed: ROOT_SEED });
+    await ws.announced; // resolves; would reject if joinTopic had been called
+    await ws.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// One root keypair per workspace (#317)
+// ---------------------------------------------------------------------------
+//
+// `workspace-format.md` resolves this explicitly: "Orgs with multiple
+// workspaces create multiple `.workspace` folders, each with its own root
+// keypair." The desktop app was passing the device's identity seed as the root
+// seed, so every workspace made on one machine had the same id — and since the
+// swarm topic is a hash of that id, the same topic too.
+
+test('two workspaces created from one device identity have different ids', async () => {
+  // The regression. `workspaceId` is the root public key, so a shared root
+  // seed is a shared identity: the sidebar deduped one away, and peers would
+  // have been told two different workspaces were the same one.
+  const DEVICE_SEED = new Uint8Array(32).fill(9);
+  const createRuntime = makeRuntimeFactory();
+
+  await withTmp(async (folder) => {
+    const a = await Workspace.create({ createRuntime, folder, name: 'A', identitySeed: DEVICE_SEED });
+    const b = await Workspace.create({
+      createRuntime,
+      folder: `${folder}-second`,
+      name: 'B',
+      identitySeed: DEVICE_SEED,
+    });
+
+    assert.notEqual(a.id, b.id, 'each workspace has its own root keypair');
+    // Same device, so the same peer identity in both — which is the point:
+    // one machine, many workspaces.
+    assert.equal(a.did, b.did);
+    assert.equal(a.did, didFromSeed(DEVICE_SEED));
+    await a.close();
+    await b.close();
+  });
+});
+
+test('the creator can reopen a workspace whose root is not their device key', async () => {
+  // The trap in this fix. `open` looks for an envelope addressed to the
+  // OPENING device; create used to address it to the root. That only worked
+  // while the two seeds were the same value, so making the root seed random
+  // without moving the envelope would have given unique ids and broken
+  // reopening — worse than the bug.
+  const DEVICE_SEED = new Uint8Array(32).fill(9);
+  const createRuntime = makeRuntimeFactory();
+
+  await withTmp(async (folder) => {
+    const created = await Workspace.create({
+      createRuntime,
+      folder,
+      name: 'Acme',
+      identitySeed: DEVICE_SEED,
+    });
+    const id = created.id;
+    await created.write(new TextEncoder().encode('before close'));
+    await created.close();
+
+    const reopened = await Workspace.open({ createRuntime, folder, identitySeed: DEVICE_SEED });
+    assert.equal(reopened.id, id, 'same workspace');
+    assert.equal(reopened.did, didFromSeed(DEVICE_SEED));
+    await reopened.close();
+  });
+});
+
+test('a workspace root identity is not the creator device identity', async () => {
+  const DEVICE_SEED = new Uint8Array(32).fill(9);
+  const createRuntime = makeRuntimeFactory();
+  await withTmp(async (folder) => {
+    const ws = await Workspace.create({ createRuntime, folder, name: 'Acme', identitySeed: DEVICE_SEED });
+    assert.notEqual(ws.did, ws.rootDid, 'the device is a member, not the workspace');
+    assert.equal(ws.did, didFromSeed(DEVICE_SEED));
+    await ws.close();
   });
 });

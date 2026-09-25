@@ -11,9 +11,36 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./node": {
-      "types": "./src/node.ts",
-      "default": "./src/node.ts"
+    "./remote-node": {
+      "types": "./src/ipc/remote.node.ts",
+      "default": "./src/ipc/remote.node.ts"
+    },
+    "./remote-macos": {
+      "types": "./src/ipc/remote.macos.ts",
+      "default": "./src/ipc/remote.macos.ts"
+    },
+    "./remote-ios": {
+      "types": "./src/ipc/remote.ios.ts",
+      "default": "./src/ipc/remote.ios.ts"
+    },
+    "./paths": {
+      "types": "./src/paths.ts",
+      "default": "./src/paths.ts"
+    }
+  },
+  "_imports_note": "Host builtins, mapped per host. Under Bare there is no `fs` builtin — `bare-fs` IS the filesystem module — so this is correct resolution rather than a workaround, and the `bare` condition scopes it to that host. watcher.ts imports these unprefixed and relies on this map; it previously relied on the GLOBAL bare-pack override instead, which works only while this package is bundled by this repo's own build (#335).",
+  "imports": {
+    "fs": {
+      "bare": "bare-fs",
+      "default": "fs"
+    },
+    "fs/promises": {
+      "bare": "bare-fs/promises",
+      "default": "fs/promises"
+    },
+    "path": {
+      "bare": "bare-path",
+      "default": "path"
     }
   },
   "scripts": {
@@ -24,9 +51,12 @@
     "node": ">=22.6"
   },
   "dependencies": {
+    "@babel/runtime": "^7.29.7",
     "@workspace.sh/p2p-runtime": "*",
     "@workspace.sh/portable-bootstrap": "*",
-    "@workspace.sh/ucan-boundary": "*"
+    "@workspace.sh/ucan-boundary": "*",
+    "b4a": "1.8.0",
+    "sodium-universal": "^5.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
