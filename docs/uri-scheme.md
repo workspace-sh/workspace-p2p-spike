@@ -36,7 +36,7 @@ workspace://v1/<workspace-pubkey>/document/<doc-id>                          ←
 workspace://v1/<workspace-pubkey>/document/<doc-id>/<locator>                ← sub-resource within
 workspace://v1/<workspace-pubkey>/document/<doc-id>/comment/<comment-id>     ← comment on the document
 workspace://v1/<workspace-pubkey>/document/<doc-id>/<locator>/comment/<id>   ← comment on a sub-resource
-workspace://v1/<workspace-pubkey>/invite/<recipient-did>                     ← invite link
+workspace://v1/<workspace-pubkey>#invite=<code>                              ← invite link
 workspace://v1/<workspace-pubkey>/user/<user-did>                            ← user reference
 workspace://v1/<workspace-pubkey>/team/<team-id>                             ← team (reserved, v1.x)
 ```
@@ -53,15 +53,15 @@ workspace://v1/<workspace-pubkey>[/<path>][?<query>][#<fragment>]
 - `v1` — the URI scheme version, in the path
 - `<workspace-pubkey>` — the workspace's root identity, multibase-encoded
 - `<path>` — optional path components for sub-addressing (documents, sub-resources, comments, etc.)
-- `<query>` — optional non-routing metadata (relay hints, friendly hints, etc.)
-- `<fragment>` — optional client-local view state (scroll position, expansion state, etc.); never used for routing
+- `<query>` — optional non-routing metadata (relay hints)
+- `<fragment>` — optional client-local view state (scroll position, expansion state, etc.), or an invite code; never used for routing
 
 Routing breaks into two layers:
 
 - **Routing-critical** — the workspace pubkey and the document ID. These resolve to a specific document and must succeed. If they fail, the URI is broken.
 - **Best-effort refinement** — the sub-resource locator (the path segment after `document/<id>`). If a locator doesn't match anything in the current document (heading renamed, row deleted, node removed), the app **soft-fails to the document root**. The user lands in the correct document, just not scrolled to the anchor. Same behaviour as Notion / Google Docs section links.
 
-Query strings carry only optional hints. Fragments carry only client-local view state. This isolates routing from the parts of a URL that some chat apps mangle when generating previews.
+Query strings carry only relay hints. Fragments carry client-local view state and invite codes, neither of which routes. This isolates routing from the parts of a URL that some chat apps mangle when generating previews.
 
 ---
 
@@ -111,7 +111,6 @@ At the workspace level (immediately after `<workspace-pubkey>`):
 | Namespace | Purpose | ID shape | Status |
 |---|---|---|---|
 | `/document/<id>` | universal container for any primary content resource (markdown, canvas, table, folder, PDF, video, etc.) | UUIDv4 in base58btc | v1 |
-| `/invite/<did>` | invite addressed to a specific recipient | full DID in multibase form | v1 |
 | `/user/<did>` | reference to a user within this workspace | full DID in multibase form | v1 |
 | `/team/<id>` | reference to a team / tier | UUIDv4 in base58btc | v1.x (reserved) |
 
@@ -142,7 +141,6 @@ Non-content addressable things have their own top-level namespaces:
 
 - People → `/user/<did>`
 - Teams / tiers → `/team/<id>`
-- Invites → `/invite/<did>`
 
 If future versions need to address things that aren't documents and aren't people/teams (live data streams, automation tasks, etc.), they get their own top-level namespaces. The split is "things that are content (any file)" vs "things that are subjects (users, teams, processes)."
 
@@ -284,7 +282,6 @@ Reserved query parameters (all optional, never required for routing):
 | Parameter | Meaning | Format | Notes |
 |---|---|---|---|
 | `relays` | bootstrap relay hints | comma-separated hostnames or URLs | `?relays=public.workspace.sh,relay.acme.internal` |
-| `hint` | friendly workspace-name hint for chat-app previews | a string | cosmetic only; app reconciles against the manifest at open time |
 | `at` (reserved) | "open at this version/time" | timestamp | reserved for future time-travel UX |
 
 All are optional. URIs with no query string work the same. Parsers that don't recognise a parameter ignore it.
@@ -305,23 +302,37 @@ Fragments must never be used for routing. Some chat-app previewers strip fragmen
 
 ### Canonical URIs are fragment-free
 
-A conforming client **MUST NOT** auto-generate fragments in URIs produced by a "share this" / "copy link" action. Canonical URIs as emitted by the workspace app carry no fragment.
+A conforming client **MUST NOT** auto-generate fragments in URIs produced by a "share this" / "copy link" action. Canonical URIs as emitted by the workspace app carry no fragment. The one exception is **Copy Invite Link**, below, which adds only `invite`.
 
-### Visible / human-readable slugs — fragment-only, never path or query
+### Invite codes
 
-If a client (Workspace's or a third party's) ever offers a UX feature that adds a human-readable hint to a shared URI for at-a-glance preview — e.g. so a chat-app preview shows the reader "this points to the *Reporting Process* section" — that hint **MUST** ride in the fragment, never in the path or query.
+An invite link is the workspace link plus one fragment parameter:
 
 ```
-workspace://v1/z6Mk…/document/4Hp8…/9MnPpQrStUv#hint=reporting-process
+workspace://v1/z6Mk…#invite=<code>
 ```
 
-Reasoning:
+- **What it is.** `<code>` is a bearer invite in z-base-32 ([`join-by-link.md`](./join-by-link.md) § Links). Opening the link claims the invite, and then the URI resolves as it would without it.
+- **Not routing.** The resource is the same with the code or without it.
+- **Why the fragment.** A fragment isn't sent to any server a URL passes through.
+- **Fails safe.** A previewer that strips the fragment leaves the plain link, which grants nothing.
+- **Order.** A parser reads `invite` from the fragment's `&`-separated parameters, and a formatter writes it first.
+- **`stripFragmentsOnShare`** doesn't remove it: an admin makes an invite link on purpose.
 
-- Path placement would leak the semantic content through every URL-bearing channel (history, logs, screenshots) — defeating the whole reason locators are opaque IDs in the first place.
-- Query placement carries the same leak; query strings are sometimes mangled but they still travel in most contexts.
-- Fragment placement keeps the hint client-local. Routing intermediaries strip or ignore fragments; preview generators that present the URL pre-strip the fragment; the URL's authoritative form (what gets indexed, what's stored in browser history at the server-visible level) doesn't carry it.
+### No names in a link
 
-The hint is also a **snapshot-at-share-time**: it reflects what the heading was called when the URL was generated. If the heading is later renamed, the hint goes stale. That's harmless — the URL still routes correctly via the opaque ID in the path; the stale hint is just a cosmetic mismatch.
+A link never carries a name — not the workspace's, not a heading's, whether in
+the path, the query or the fragment (decided 16 Sep 2026). A name in a link is
+text written by whoever wrote the link, so an app that showed it would be
+repeating a stranger's claim about which workspace this is, and a link would
+leak the name to every channel it passes through.
+
+A name shown before a device is let in has to come from something the root
+signed. The grant index a joiner already reads is the natural carrier, opt-in
+per workspace, and it proves only that the workspace's owner calls it that.
+Proving whose workspace it is needs a domain paired with it in both directions
+— a DNS record naming the workspace, and a signed claim naming the domain —
+which is where this is going.
 
 Workspaces with strict privacy posture should use the `policy.json` workspace policy (see [`workspace-format.md`](./workspace-format.md)) to declare `stripFragmentsOnShare: true`, telling cooperating clients to strip any user-added fragments before producing a share link.
 
@@ -331,7 +342,7 @@ Workspaces with strict privacy posture should use the `policy.json` workspace po
 
 When an app opens a `workspace://` URI:
 
-1. **Parse the URI** — extract the workspace pubkey from the path; parse the version; identify the resource type from the next path segment
+1. **Parse the URI** — extract the workspace pubkey from the path; parse the version; identify the resource type from the next path segment. If the fragment carries `invite`, claim it first ([`join-by-link.md`](./join-by-link.md) § Claiming an invite)
 2. **Derive the Hyperswarm topic** — SHA-256 of the 32-byte public key (without the multicodec prefix), the value a new workspace records as `manifest.topicId`
 3. **Discover peers** — join the Hyperswarm topic via DHT; in parallel, try any `relays` query hints for faster cold-start
 4. **Fetch the workspace bootstrap** — `manifest.json` + `attestation.json` from any peer (~2 KB)
@@ -341,7 +352,6 @@ When an app opens a `workspace://` URI:
    - `/document/<id>` — Hyperbee lookup on document ID → returns metadata (type, path, tier requirements)
    - `/document/<id>/<locator>` — open the document; resolve the locator via the document's format-specific mechanism (Hyperbee for markdown sections, in-file for canvas nodes, etc.). On miss: soft-fail to document root.
    - `/document/<id>/comment/<id>` — Hyperbee lookup on comment ID
-   - `/invite/<did>` — read the envelope file at `.workspace/envelopes/<encoded-did>.json`
    - `/user/<did>` — Hyperbee lookup on user DID
    - `/team/<id>` — Hyperbee lookup on team ID
 8. **Apply tier-key gating** — if the resolved resource is tier-gated and the user doesn't hold the required tier key, surface "you don't have access"
@@ -361,7 +371,6 @@ When an app opens a `workspace://` URI:
 | Comment ID | Hyperbee | O(log n) |
 | Team ID | Hyperbee | O(log n) |
 | User DID | Hyperbee | O(log n) |
-| Envelope (invite recipient DID) | `.workspace/envelopes/<encoded-did>.json` — one file per recipient | O(1) file read |
 
 No giant index files at the workspace level. The Hypercore data log itself is structurally an event stream; Hyperbee sits on top as a B-tree projection for fast keyed lookups. Sparse-loadable — peers fetch only blocks they actually query. Cold-start cost is bounded (~4 KB) regardless of workspace size.
 
@@ -390,15 +399,15 @@ Same, with hints for two relays the receiving app may use to accelerate cold-sta
 ### Invite
 
 ```
-workspace://v1/z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc/invite/z6MkBobX5tYpQrStUvWxYzAaBbCcDdEeFfGgHhJjKkLm
+workspace://v1/z6MkpKpf2nFiC5h9qDPgJrkBbYBaThkAEcVCgGuBHkXqK4Vc#invite=yyb8…
 ```
 
-Bob (the recipient) sees this URL. His Workspace app:
-- Joins the workspace's swarm
-- Finds the envelope sealed to his DID in `.workspace/envelopes/`
-- Validates the UCAN inside, unwraps the symmetric keys, joins as a member
+The admin's Copy Invite Link made this, and Bob opens it. His Workspace app:
+- claims the invite from the admin's device, which seals an envelope to Bob's device key;
+- validates the UCAN inside and unwraps the workspace key;
+- joins as a member.
 
-Forwarding the URL to someone else is harmless — the envelope is sealed to Bob's pubkey; nobody else can unwrap it.
+The invite is single-use and expires after 7 days by default, so a forwarded link admits whoever claims it first. The admin can revoke an unclaimed invite. With the fragment stripped, it is the workspace link, which grants nothing ([`join-by-link.md`](./join-by-link.md)).
 
 ### Document
 
@@ -495,17 +504,22 @@ Honest accounting of what an outsider (no workspace access) learns from a `works
 
 - That a workspace exists at this `<workspace-pubkey>`
 - That a resource exists at the addressed ID
-- The resource's *type category* (document / invite / user / team), via the path namespace
+- The resource's *type category* (document / user / team), via the path namespace
+- For an invite link: a bearer invite, which admits whoever claims it first until it is used, expires or is revoked
 - For sub-resources via the locator: the locator form (structural address, opaque ID, or positional) — which narrows the format type. Not the locator's *meaning*.
+- **Who is in the workspace, as it is built today.** The id is also the topic, so a holder can join it and see which devices are online and from where; and the root-signed grant index lists every grant, each of which is a UCAN naming the device it was sealed for. So a URL is enough to enumerate a workspace's devices and watch when they appear. This is a gap rather than a design: it is tracked as workspace-sh/workspace#533, whose fix encrypts a grant under a key derived from the root and device keys together, so only someone who already knows a device can find its grant.
 
 What does NOT leak:
 
 - Contents
 - Resource names or titles (no slugs in canonical URIs; opaque IDs for semantic locators)
-- Membership of the workspace
 - Who created or owns the resource
 - When it was created
 - The workspace's friendly name
+
+Until workspace-sh/workspace#533 lands, treat a link as naming the workspace's
+devices as well as the workspace. A link shared in a group chat tells everyone
+in that chat which devices belong to it.
 
 For sensitivity beyond what this provides — e.g. a workspace whose *existence* must remain unknown to non-members — the answer is don't share its URI in any context that reaches non-members. The URI scheme can't defend against URLs being copied into public places by their holders; only against information being readable in URLs that legitimately reach the wrong audience.
 
@@ -515,7 +529,7 @@ For high-privacy workspaces (sensitive investigations, regulated content), the w
 
 ## Reserved for future versions
 
-- **Targeted-envelope URIs** — a variant where the URI carries an envelope inline, sealed to a specific recipient. Decision deferred; v1 uses separate `/invite/<did>` URI with envelope on the side
+- **Targeted-envelope URIs** — a variant where the URI carries an envelope inline, sealed to a specific recipient. Decision deferred; v1 invite links carry a bearer invite code (`#invite=`) instead, and the envelope is sealed when the invite is claimed
 - **Time-travel addressing** — `?at=<timestamp>` for opening a resource at a specific past version
 - **Cross-workspace references** — URIs that reference resources in *another* workspace from within a `workspace://` URL (currently: just use a fully-qualified `workspace://` URL anywhere)
 - **Workspace-of-workspaces** — nested workspaces. Currently a workspace is the top-level identity; nested constructs would require new path syntax
