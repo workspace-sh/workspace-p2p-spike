@@ -361,7 +361,12 @@ a modified client gains nothing by ignoring its own revocation — the
 refusal happens on the other device.
 
 What remains cooperative is only the local cleanup a revoked peer's own
-app does on seeing the block.
+app does on seeing the block. The revoked device reads the block too when it
+is connected at the time, and the apps say so — "Access revoked" in place
+of a peer count, which for a revoked device is misleading
+(workspace-sh/workspace#600, #602). A device revoked while offline reads
+it from nobody, since every member refuses it, so its silence is not
+evidence either way.
 
 #### What it does not do
 
@@ -374,6 +379,11 @@ Forward-only is not the whole of it, and the rest is easy to miss:
   block reaches *its* replica of the log. A member that admitted the
   revoked device before reading it goes on serving that device — so a
   revocation propagates at the speed of the log, not of the click.
+  Every member keeps the whole key delivery log downloading as it grows,
+  so a connected member has the block within moments (about 200 ms on a
+  local testnet). Before workspace-sh/workspace#599 no member did: a
+  replica fetches no block unless asked, the scan read only what was
+  local, and only the root's own device ever held a revocation.
 - **It recalls nothing.** Whatever already replicated is on that device.
 - **It does not re-key.** Writes made before a rotation stay readable to
   anyone already holding `K0_org`, which is why the two levers in this
