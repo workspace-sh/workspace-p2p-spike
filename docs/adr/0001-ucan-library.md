@@ -1,6 +1,6 @@
 # ADR 0001 — UCAN library: ucanto, not iso-ucan
 
-**Status:** Accepted · **Date:** 2026-06 · **Tracks:** [#19](https://github.com/workspace-sh/workspace-p2p-spike/issues/19)
+**Status:** Superseded by [0004](./0004-ucan-1-iso-ucan.md) (Sep 2026) · **Date:** 2026-06 · **Tracks:** [#19](https://github.com/workspace-sh/workspace-p2p-spike/issues/19)
 
 ## Context
 

@@ -18,10 +18,10 @@ A join crosses three layers. Each does one job and hands over.
 | Layer | Its job | Where it stops |
 |---|---|---|
 | **Holepunch transport**: HyperDHT, Hyperswarm, Protomux | Find peers by topic, hole-punch, open a Noise connection that proves each side holds its device key, multiplex channels over it | Two devices that know each other's device key, with an encrypted pipe and channels |
-| **UCAN**, via ucanto | Say who may do what: the root, or someone the root delegated to, grants a device `workspace/read` on `workspace://v1/<id>` until a time | At the connection gate: the chain verifies to the root, names this workspace, and its audience is the key Noise just proved. After that UCAN is not consulted |
+| **UCAN** 1.0, via iso-ucan ([ADR 0004](./adr/0004-ucan-1-iso-ucan.md)) | Say who may do what: the root, or someone the root delegated to, grants a device `workspace/read` on `workspace://v1/<id>` until a time | At the connection gate: the chain verifies to the root, names this workspace, and its audience is the key Noise just proved. After that UCAN is not consulted |
 | **Hypercore**, Corestore | Append-only logs signed by their writer; replication sends blocks a reader verifies against the log key | "These are exactly the bytes the writer appended". It knows keys, not people, and does not encrypt |
 
-What is ours, not Holepunch's or ucanto's:
+What is ours, not Holepunch's or the UCAN library's:
 
 - **The device key.** One ed25519 key is both the Noise static key and the
   UCAN audience (`did:key`). That binding is what makes a copied UCAN useless
@@ -594,10 +594,12 @@ Autobase's settled order:
   invocations), latest 0.5.0 (Apr 2026), without a revocation module. `ucanto`
   still targets 0.9.1; its "Upgrade to UCAN 1.0" issue has been open since Mar 2024
   ([storacha/ucanto#345](https://github.com/storacha/ucanto/issues/345)).
-- **Direction:** move `@workspace.sh/ucan-boundary` to `iso-ucan`, with capabilities
-  as 1.0 commands (`/document/read`, `/document/edit`, `/document/publish`),
-  subject the workspace root, scope in the policy; implement revocation to rc.1,
-  stored inside the workspace.
+- **Done:** `@workspace.sh/ucan-boundary` runs on `iso-ucan` (workspace#462,
+  [ADR 0004](./adr/0004-ucan-1-iso-ucan.md)): subject the workspace root, the
+  resource in the policy. Every grant is still `/workspace/read`.
+- **Still to do:** capabilities as 1.0 commands (`/document/read`,
+  `/document/edit`, `/document/publish`) with scope in the policy, and
+  revocation in the rc.1 shape, stored inside the workspace.
 
 ## Implementation order (after the decisions)
 

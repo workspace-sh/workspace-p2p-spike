@@ -194,6 +194,11 @@ API stabilises differently.
 
 ### Position
 
+**Superseded, Sep 2026:** the SDK moved to iso-ucan and UCAN 1.0
+(workspace#462, [ADR 0004](./adr/0004-ucan-1-iso-ucan.md)), with revocation
+built as our own root-signed block rather than taken from a library. The
+reasoning below is the original position, kept for the record.
+
 ucanto for v1, because **revocation is load-bearing** for our
 permission model and ucanto has a working revocation hook today.
 The boundary module pattern

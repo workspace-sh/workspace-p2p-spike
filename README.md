@@ -217,8 +217,9 @@ workspace was distributed.
 │   ├── risks.md                         ← where this could fail and what we're doing
 │   ├── ucan-prior-research.md           ← UCAN library notes from earlier spike
 │   └── adr/                             ← architecture decision records
-│       ├── 0001-ucan-library.md         ← ucanto (not iso-ucan)
-│       └── 0002-autobase-merge-strategy.md ← per-format LWW over Autobase
+│       ├── 0001-ucan-library.md         ← ucanto; superseded by 0004 (iso-ucan, UCAN 1.0)
+│       ├── 0002-autobase-merge-strategy.md ← per-format LWW over Autobase
+│       └── 0004-ucan-1-iso-ucan.md       ← UCAN 1.0 through iso-ucan (the SDK today)
 ├── packages/
 │   ├── p2p-runtime/                     ← @workspace.sh/p2p-runtime
 │   │   └── src/
@@ -228,7 +229,7 @@ workspace was distributed.
 │   │       ├── wrap.ts                  ← X25519 ECDH sealed envelopes
 │   │       └── attestation.ts           ← root attestation sign/verify
 │   ├── ucan-boundary/                   ← @workspace.sh/ucan-boundary
-│   │   └── src/index.ts                 ← every ucanto call lives here
+│   │   └── src/index.ts                 ← every ucanto call lives here (prototype; the SDK runs iso-ucan)
 │   ├── portable-bootstrap/              ← @workspace.sh/portable-bootstrap
 │   │   └── src/
 │   │       ├── index.ts                 ← createBundle / consumeBundle / createEnvelope
