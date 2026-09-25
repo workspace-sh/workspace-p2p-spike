@@ -94,12 +94,25 @@ Two notes for the folder:
   refused with their own reason (workspace#492).
   `yarn p2p:smoke:invite-link`.
 - **Revoking a member**, and the gate refusing them at their next connection
-  (workspace#433). `yarn p2p:smoke:revocation`.
+  (workspace#433) — on every member, not only the admin: members keep the key
+  delivery log downloading, so a connected member holds a revocation within
+  moments (workspace#599). A revoked device that was connected reads its own
+  revocation, and the apps say "Access revoked" (workspace#600, #602).
+  `yarn p2p:smoke:revocation`.
+- **Who is in, and how each got in.** The admin's device records each
+  admission — by invite (which one), by request (the name typed, as the
+  asker's claim) or by device ID — and lists members with it (workspace#577).
+- **Asking to join into a sent folder.** A folder holding only this
+  workspace's identity — what Export Folder… writes — can be asked into, so
+  whoever receives it gets in without a new folder (workspace#594, #596).
 - **All of it over IPC**, so the apps can reach it rather than only the SDK.
+- **In both apps** (Linux and macOS): Copy Invite Link, Copy Workspace Link,
+  Export Folder…, Share with Device ID… under Advanced, Requests to Join,
+  Manage Invites with New Invite… for a reusable one, Members with Revoke
+  Access…, and Ask to Join from a link or a folder (workspace#576–#602).
 
-**Not built yet:** the requests flag in the grant index, the share options in
-each app (workspace#494–#496), and `workspace://` handling by any platform
-(workspace#236).
+**Not built yet:** the requests flag in the grant index, and `workspace://`
+handling by any platform (workspace#236).
 
 ## How a person joins (decided 15 Sep 2026)
 
@@ -150,7 +163,7 @@ workspace://v1/<id>#invite=<code>    the same link, plus a bearer invite
 
 | Question | Decision (15 Sep 2026) |
 |---|---|
-| Invites | Single-use, expiring after 7 days ("yes!"). A reusable invite when the admin asks for one |
+| Invites | Single-use, expiring after 7 days ("yes!"). A reusable invite when the admin asks for one: 1, 5 or 25 uses, lasting 1, 7 or 30 days, and nothing past that — a bearer link's limits are its blast radius (built, workspace#587, #590) |
 | Requests | Off until the admin turns them on, per workspace ("sure!") |
 | Who admits | Admins only, for now ("okay!"). Delegating to members or a Lighthouse comes later |
 
@@ -261,12 +274,18 @@ to the person who just used it. Only expiry makes a record worthless.
 | An expired, used or revoked invite | The refusal above |
 | A workspace link, with a grant, no member online | "Waiting for someone in the workspace to come online", until a member comes online or the person cancels |
 | A workspace link or folder, as a member | It opens |
-| A workspace link or folder, not a member, requests off | "You don't have access to this workspace. Ask the person who shared it for an invite link." |
-| The same, requests on | The same, plus **Ask to Join** |
+| A workspace link or folder, not a member | "You don't have access to this workspace. Ask the person who shared it for an invite link.", plus **Ask to Join** |
+| An ask nobody accepts | After the request expires (10 minutes): "Not let in", and nothing about why |
+
+Until the requests flag exists (below), the apps cannot tell "requests off"
+from "no admin online", so they offer **Ask to Join** whenever a link or
+folder gives no access. A declined, ignored and unanswered request all end
+the same way, which is the point: a stranger is not told which.
 
 - **No name in a link.** Before admission the app knows only the folder name the joiner chose, or the folder's own name. A name carried in a link would be unverified text from whoever wrote the link.
 - **Progress and cancel.** A join reports its stages over IPC and can be cancelled (workspace#499): `finding-grant`, `connecting`, `waiting-for-member` (after 5 s with no member), `opening`. With the grant found, an app waits for a member until the person cancels.
-  - Invite links will add `claiming` and `waiting-for-admin` before these.
+  - Claiming an invite and asking report their own stages instead:
+    `finding-admin`, `waiting-for-admin`, `asked`, `accepted`.
 
 ### Requesting access
 
@@ -594,14 +613,18 @@ Autobase's settled order:
   invocations), latest 0.5.0 (Apr 2026), without a revocation module. `ucanto`
   still targets 0.9.1; its "Upgrade to UCAN 1.0" issue has been open since Mar 2024
   ([storacha/ucanto#345](https://github.com/storacha/ucanto/issues/345)).
-- **Direction:** move `@workspace.sh/ucan-boundary` to `iso-ucan`, with capabilities
-  as 1.0 commands (`/document/read`, `/document/edit`, `/document/publish`),
-  subject the workspace root, scope in the policy; implement revocation to rc.1,
-  stored inside the workspace.
+- **Done:** `@workspace.sh/ucan-boundary` runs on `iso-ucan` (workspace#462; ADR
+  0001 records why): subject the workspace root, the resource in the policy.
+  Every grant is still `/workspace/read`.
+- **Still to do:** capabilities as 1.0 commands (`/document/read`,
+  `/document/edit`, `/document/publish`) with scope in the policy, and
+  revocation in the rc.1 shape, stored inside the workspace.
 
 ## Implementation order (after the decisions)
 
 1. ~~Identifiers and attestation (Decide 1)~~: done, workspace#466.
+Built through step 10 except where marked.
+
 2. Grant records: binary grant and index encoding (`portable-bootstrap`),
    record put/get on the runtime (`p2p-runtime`), `invite` publishing and an
    online member refreshing (`workspace`).
@@ -609,14 +632,15 @@ Autobase's settled order:
    an admitted peer that lacks them.
 4. Join by link: `workspace` resolves a link to a folder (grant, topic, gate,
    bootstrap); IPC method; Linux Copy Link on Share…, and a `workspace://`
-   handler (`.desktop` `x-scheme-handler/workspace`).
+   handler (`.desktop` `x-scheme-handler/workspace`; the handler is **not
+   built**, workspace#236).
 5. A two-device smoke that joins from the link alone.
 6. Links parsed in one place: the workspace link, `#invite=`, and z-base-32 (workspace#498).
 7. Join progress and cancel over IPC, with the joiner's states above (workspace#499).
 8. Access requests (workspace#493). These need no new dependency:
    - the request topic and `workspace/request@1` channel;
    - the commit-then-reveal code and the limits;
-   - the requests flag in the grant index;
+   - the requests flag in the grant index (**not built**);
    - the admin's inbox with Accept and Decline;
    - a smoke where a request is accepted after comparing codes.
 9. Invite links (workspace#492), on the request channel step 8 builds:
@@ -636,8 +660,9 @@ Autobase's settled order:
   (and should learn the new topic through the key delivery log) or revoked (and
   should not).
 - Per-workspace admission when one connection carries several workspaces (#47).
-- Revocation: `isRevoked` is not wired yet (workspace-sh/workspace#433), so a
-  link's UCAN is valid until it expires.
+- Revocation is enforced at every member's gate (workspace#433, #549, #599),
+  but a device revoked while offline never learns it: every member refuses it,
+  so there is nobody to read the revocation from.
 
 ## Cross-references
 
