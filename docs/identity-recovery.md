@@ -55,6 +55,10 @@ Per platform, the trap is the same shape:
   with a group scoped to the team rather than the app.
 - **Android** — Keystore aliases are scoped to the package name; a package
   rename loses them identically.
+- **Linux** — the seed is a file under `$XDG_DATA_HOME/workspace`, so the
+  path is the identity. Renaming that directory, or running the app in a
+  sandbox that gives it its own XDG directories (a Flatpak, for one), makes
+  it a different device.
 - **Anywhere** — storage keyed on an application identifier inherits that
   identifier's lifetime. Application Support paths built from a bundle id
   have exactly this problem, and that one is self-inflicted: the path is
