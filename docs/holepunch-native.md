@@ -30,7 +30,7 @@ Versions: hyperdrive 13.3.4, autobase 7.28.2, hyperbee 2.27.3, corestore
 | **No key** | A peer without the encryption key can't even list the tree. |
 | **Tiers in one core** | A Hypercore encryption provider that keys each block by tier: an org-only reader replicates and verifies every block but reads only org blocks, an HR reader reads all, and a keyless peer holds ciphertext. |
 | **Cost of many cores** | Syncing N small encrypted cores to a joining peer: 100 in 0.5 s, 500 in 2.0 s, 2,000 in 6.8 s. Memory grows about 0.2 MB per open core (2,000 ≈ 425 MB). |
-| **Tree on disk with placeholders** | MirrorDrive with `filter` (only what's downloaded) and `ignore` (placeholders), plus our step that writes `name.sparse` stubs. After opening, the stub is replaced by the file. After `clear`, **our step must delete the file on disk too**, or no space is freed. |
+| **Tree on disk with placeholders** | MirrorDrive with `filter` (only what's downloaded) and `ignore` (placeholders), plus our step that writes `name.sparse` stubs. After opening, the stub is replaced by the file. After `clear`, our step deletes the file on disk too, or no space is freed, **but only if it is unchanged since the step wrote it**: a file edited on disk and not yet synced is kept. |
 | **Multi-writer** | Three devices on an encrypted Autobase with a Hyperbee view. A writer is added in `apply` only with a valid UCAN `/workspace/write` delegation from the root; a read-only token is refused on every re-apply, and that device can't append. Concurrent writes, including to one path, converge identically on all three. |
 
 ## The shape
@@ -94,9 +94,23 @@ Versions: hyperdrive 13.3.4, autobase 7.28.2, hyperbee 2.27.3, corestore
 What this removes: `encryptedLog`, `blobs.ts`'s chunking, and the whole-document
 entries that every device downloads.
 
+## The runtimes (measured on a Mac)
+
+- **macOS child:** plain system Node, and every native addon has a
+  darwin-arm64 prebuild. The five scripts run clean, with numbers close to
+  the Linux ones.
+- **Phone (Bare worklet):** the graph bundles through the mobile bare-pack
+  path (1.7 MB), and m1 runs under the Bare runtime. It needs a **native
+  relink** on iOS and Android, not only a new bundle: `rabin-native` is new
+  (mirror-drive → rabin-stream), and `rocksdb-native` moves 3.17.4 → 3.18.1,
+  with several `bare-*` bumps.
+- **The app-side interface:** tree, get, put, has, download, clear and a diff
+  event fit. **File bytes must not cross IPC**, which carries hex in JSON
+  lines, so a 20 MB file would become a 40 MB string. `get` and `download`
+  write to disk and return the path.
+
 ## Still open
 
-- **Runtime:** Hyperdrive, Autobase and MirrorDrive in the phone's Bare
-  worklet and the macOS child, and the app-side interface they need (tree,
-  get, put, has, download, clear, change events).
+- **On-device numbers** for the phone (memory, time to list the tree), which
+  need an app launched on a simulator or device.
 - **Migration:** pre-alpha, so existing workspaces are recreated.
